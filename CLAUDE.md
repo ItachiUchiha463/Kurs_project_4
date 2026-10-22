@@ -32,7 +32,14 @@ docs/          ARCHITECTURE.md, prototype/
 
 ## Команди
 
-Ще не створено – додай сюди, щойно з'являться (запуск, тести, міграції, лінтер).
+```bash
+docker compose up -d db                    # TimescaleDB на localhost:5433 (.env з .env.example)
+cd backend
+python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"
+.venv/Scripts/alembic upgrade head         # міграції
+.venv/Scripts/python -m pytest -q          # тести (окрема БД vigil_test створюється сама)
+.venv/Scripts/uvicorn app.main:app --reload --workers 1
+```
 
 ## Жорсткі правила
 

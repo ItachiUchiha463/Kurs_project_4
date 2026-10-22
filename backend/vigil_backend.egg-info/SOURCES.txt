@@ -1,0 +1,6 @@
+pyproject.toml
+vigil_backend.egg-info/PKG-INFO
+vigil_backend.egg-info/SOURCES.txt
+vigil_backend.egg-info/dependency_links.txt
+vigil_backend.egg-info/requires.txt
+vigil_backend.egg-info/top_level.txt
