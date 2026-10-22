@@ -35,3 +35,4 @@ Thumbs.db
 
 # локальні налаштування Claude Code
 .claude/settings.local.json
+*.egg-info/
