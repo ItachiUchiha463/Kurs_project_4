@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import Conflict, NotFound
 from app.models import Incident, User
 from app.repositories import incidents as repo
-from app.schemas.incidents import EventOut, IncidentDetail, IncidentOut
+from app.schemas.incidents import DiagnosisOut, EventOut, IncidentDetail, IncidentOut
 from app.services import pipeline
+from app.services.diagnosis import NO_CAUSE, NO_CAUSE_HINT
 
 
 def _out(inc: Incident, target_name: str) -> IncidentOut:
@@ -35,8 +36,13 @@ async def get_incident(db: AsyncSession, user: User, incident_id: int) -> Incide
     return IncidentDetail(**_out(inc, name).model_dump(), events=events, diagnosis=diagnosis_out(diagnosis))
 
 
-def diagnosis_out(d):
-    return None  # діагностику додає крок «логічне виведення»
+def diagnosis_out(row) -> DiagnosisOut | None:
+    if row is None:
+        return None
+    d, rule = row
+    return DiagnosisOut(
+        cause=rule.cause if rule else NO_CAUSE, recommendation=rule.recommendation if rule else NO_CAUSE_HINT,
+        matched_ratio=d.matched_ratio, evidence=d.evidence, alternatives=d.alternatives)
 
 
 async def acknowledge(db: AsyncSession, user: User, incident_id: int) -> IncidentOut:

@@ -10,6 +10,7 @@ from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS
 from app.engine.thresholds import Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
+from app.services import diagnosis
 
 log = logging.getLogger("vigil.pipeline")
 
@@ -33,6 +34,7 @@ class Change:
     incident: Incident
     target: Target
     value: float
+    ts: datetime
 
 
 async def _aggregate(db: AsyncSession, target_id: int, p: Point, th: Threshold) -> float:
@@ -67,22 +69,22 @@ async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) 
         await db.flush()
         repo.add_event(db, inc.id, "detected", act.value, act.first_breach_at)
         repo.add_event(db, inc.id, "opened", act.value, ts)
-        return Change("opened", inc, target, act.value)
+        return Change("opened", inc, target, act.value, ts)
     inc = await repo.get_live(db, *key)
     if inc is None:  # інцидент закрили вручну, поки стан ще пам'ятав його
         return None
     if isinstance(act, Escalate):
         inc.severity = act.severity
         repo.add_event(db, inc.id, "escalated", act.value, ts)
-        return Change("escalated", inc, target, act.value)
+        return Change("escalated", inc, target, act.value, ts)
     if isinstance(act, Deescalate):
         inc.severity = act.severity
         repo.add_event(db, inc.id, "deescalated", act.value, ts)
-        return Change("deescalated", inc, target, act.value)
+        return Change("deescalated", inc, target, act.value, ts)
     if isinstance(act, Resolve):
         inc.status, inc.resolved_at = "resolved", ts
         repo.add_event(db, inc.id, "resolved", act.value, ts, note="автоматично")
-        return Change("resolved", inc, target, act.value)
+        return Change("resolved", inc, target, act.value, ts)
     return None
 
 
@@ -118,6 +120,8 @@ async def process(db: AsyncSession, target: Target, points: list[Point]) -> list
                 changes.append(change)
     await refresh_status(db, target)
     for c in changes:
+        if c.kind in ("opened", "escalated"):
+            await diagnosis.diagnose_incident(db, c.incident, target, c.ts)
         log.info("інцидент %s", c.kind, extra={"incident_id": c.incident.id, "target_id": target.id,
                                               "metric": c.incident.metric, "severity": c.incident.severity})
     return changes

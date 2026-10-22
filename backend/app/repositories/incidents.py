@@ -2,7 +2,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Diagnosis, Incident, IncidentEvent, Target
+from app.models import Diagnosis, Incident, IncidentEvent, Rule, Target
 
 LIVE = ("open", "acknowledged")
 
@@ -35,8 +35,10 @@ async def events(db: AsyncSession, incident_id: int) -> list[IncidentEvent]:
                                  .order_by(IncidentEvent.ts, IncidentEvent.id)))
 
 
-async def diagnosis(db: AsyncSession, incident_id: int) -> Diagnosis | None:
-    return await db.scalar(select(Diagnosis).where(Diagnosis.incident_id == incident_id))
+async def diagnosis(db: AsyncSession, incident_id: int) -> tuple[Diagnosis, Rule | None] | None:
+    row = (await db.execute(select(Diagnosis, Rule).outerjoin(Rule, Rule.id == Diagnosis.rule_id)
+                            .where(Diagnosis.incident_id == incident_id))).first()
+    return (row[0], row[1]) if row else None
 
 
 async def get_live(db: AsyncSession, target_id: int, metric: str, instance: str) -> Incident | None:

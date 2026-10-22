@@ -1,14 +1,19 @@
 from datetime import datetime
 
+import httpx
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.errors import NotFound, QuotaExceeded
+from app.checks import ssrf
+from app.errors import NotFound, QuotaExceeded, Unprocessable
 from app.models import Target, User
 from app.repositories import metrics as metrics_repo
 from app.repositories import targets as repo
 from app.schemas.targets import Point, TargetCreate, TargetCreated, TargetOut
 from app.security import hash_token, new_agent_token
+
+address_resolver = ssrf.resolve_public  # у тестах підміняється, щоб не ходити в DNS
 
 
 def _out(target: Target, latest: dict[str, float] | None = None) -> TargetOut:
@@ -39,10 +44,21 @@ async def get_target(db: AsyncSession, user: User, target_id: int) -> TargetOut:
 async def create_target(db: AsyncSession, user: User, data: TargetCreate) -> TargetCreated:
     if await repo.count(db, user.id) >= settings.quota_targets:
         raise QuotaExceeded(f"Ліміт об'єктів: {settings.quota_targets}", details=[{"limit": settings.quota_targets}])
+    if data.host_id is not None:
+        host = await repo.get(db, user.id, data.host_id)
+        if not host or host.type != "server":
+            raise NotFound("Сервер для прив'язки не знайдено")
+    if data.type == "service":
+        u = httpx.URL(data.address)
+        try:
+            await address_resolver(u.host, u.port or (443 if u.scheme == "https" else 80))
+        except ssrf.BlockedAddress:
+            raise Unprocessable("Адреса недоступна з інтернету – внутрішні сервіси підключайте через агента",
+                                details=[{"field": "address", "message": "Адреса недоступна з інтернету"}]) from None
     token = new_agent_token() if data.type == "server" else None
     target = repo.add(
         db, user.id, name=data.name, type=data.type, address=data.address, interval_s=data.interval_s,
-        expected_status=data.expected_status, check_type="agent" if data.type == "server" else "http",
+        expected_status=data.expected_status, host_id=data.host_id if data.type == "service" else None, check_type="agent" if data.type == "server" else "http",
         agent_token_hash=hash_token(token) if token else None)
     await db.flush()
     return TargetCreated(**_out(target).model_dump(), agent_token=token)

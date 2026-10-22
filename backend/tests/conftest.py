@@ -38,11 +38,23 @@ async def _clean(_database):
     from sqlalchemy import text
     async with engine.begin() as conn:
         await conn.execute(text("TRUNCATE users, rules, metrics RESTART IDENTITY CASCADE"))
+    from app.db import SessionLocal
+    from seed import seed_rules
+    async with SessionLocal() as db:
+        await seed_rules(db)
+        await db.commit()
     from app.services import ingest
     ingest._last_ingest.clear()
     from app.services import pipeline
     pipeline._states.clear()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_dns(monkeypatch):
+    async def public(host, port):
+        return "93.184.216.34"
+    monkeypatch.setattr("app.services.targets.address_resolver", public)
 
 
 @pytest.fixture

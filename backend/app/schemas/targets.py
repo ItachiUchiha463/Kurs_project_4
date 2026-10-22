@@ -10,6 +10,7 @@ class TargetCreate(BaseModel):
     address: str | None = Field(default=None, max_length=500)
     interval_s: int = Field(default=30, ge=15, le=3600)
     expected_status: str = "200-399"
+    host_id: int | None = None  # сервер, на якому працює сервіс (для правил із `host`)
 
     @model_validator(mode="after")
     def _address_for_service(self):
@@ -26,6 +27,7 @@ class TargetOut(BaseModel):
     type: str
     check_type: str
     address: str | None
+    host_id: int | None = None
     interval_s: int
     status: str
     last_seen: datetime | None

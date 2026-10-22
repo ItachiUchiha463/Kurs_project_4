@@ -127,3 +127,35 @@ async def test_filters_and_cursor(client, user_factory):
     assert len(await incidents(client, h, severity="critical")) == 1
     assert len(await incidents(client, h, limit=1)) == 1
     assert len(await incidents(client, h, cursor=both[0]["id"])) == 1
+
+
+async def test_incident_gets_diagnosis_with_evidence(client, user_factory):
+    h = await user_factory()
+    t = await server(client, h)
+    await push(client, t["agent_token"], "swap_usage", 60, ago_s=200)  # порогів немає, лише факт для правила
+    await push(client, t["agent_token"], "ram_usage", 97, ago_s=100)
+    [inc] = await incidents(client, h)
+    d = (await client.get(f"/api/incidents/{inc['id']}", headers=h)).json()["diagnosis"]
+    assert d["cause"] == "Нестача оперативної пам'яті" and d["matched_ratio"] == 1.0
+    assert d["recommendation"]
+    assert [e["ok"] for e in d["evidence"]] == [True, True]
+    assert d["evidence"][0]["value"] == "97 % > 90 %" and d["evidence"][1]["value"] == "60 % > 50 %"
+
+
+async def test_unexplained_incident_says_cause_unknown(client, user_factory):
+    h = await user_factory()
+    t = await server(client, h)
+    await push(client, t["agent_token"], "cpu_usage", 99)
+    [inc] = await incidents(client, h)
+    d = (await client.get(f"/api/incidents/{inc['id']}", headers=h)).json()["diagnosis"]
+    assert d["cause"] == "Причину не визначено" and d["evidence"] == []
+
+
+async def test_user_can_only_link_service_to_own_server(client, user_factory):
+    a = await user_factory(email="a@example.com")
+    b = await user_factory(email="b@example.com")
+    sa = await server(client, a)
+    body = {"name": "shop", "type": "service", "address": "https://shop.example.ua", "host_id": sa["id"]}
+    assert (await client.post("/api/targets", json=body, headers=b)).status_code == 404
+    ok = await client.post("/api/targets", json=body, headers=a)
+    assert ok.status_code == 201 and ok.json()["host_id"] == sa["id"]

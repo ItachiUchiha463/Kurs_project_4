@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router
+from app.background import Background
 from app.config import settings
 from app.errors import install_handlers
 from app.logging import RequestLogMiddleware, setup_logging
@@ -12,7 +13,10 @@ from app.logging import RequestLogMiddleware, setup_logging
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     setup_logging(settings.log_level)
+    bg = Background()
+    await bg.start()
     yield
+    await bg.stop()
 
 
 def create_app() -> FastAPI:

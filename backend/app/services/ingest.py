@@ -72,6 +72,9 @@ async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
         rows.append({"target_id": target.id, "name": rec.metric, "instance": rec.instance, "value": rec.value, "ts": ts})
         if ts >= fresh_after:  # пізні записи з буфера лише зберігаються, інцидентів заднім числом не відкривають
             fresh.append(pipeline.Point(rec.metric, rec.instance, ts, rec.value))
+    alive = {"target_id": target.id, "name": "agent_alive", "instance": "", "value": 1.0, "ts": now}
+    rows.append(alive)  # будь-який пакет від агента – доказ, що він живий; закриває інцидент agent_alive = 0
+    fresh.append(pipeline.Point("agent_alive", "", now, 1.0))
     await metrics_repo.insert_many(db, rows)
     target.last_seen = now
     target.agent_version = agent_version
@@ -79,4 +82,4 @@ async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
     await pipeline.process(db, target, fresh)
     if rejected:
         log.warning("відкинуто записи", extra={"target_id": target.id, "rejected": len(rejected)})
-    return IngestOut(accepted=len(rows), rejected=rejected)
+    return IngestOut(accepted=len(rows) - 1, rejected=rejected)

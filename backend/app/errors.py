@@ -34,6 +34,10 @@ class AuthError(AppError):
     status, code = 401, "unauthorized"
 
 
+class Unprocessable(AppError):
+    status, code = 422, "validation_error"
+
+
 class Forbidden(AppError):
     status, code = 403, "forbidden"
 

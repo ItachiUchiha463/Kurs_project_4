@@ -46,7 +46,7 @@ async def test_ingest_stores_and_shows_latest(client, user_factory):
                           headers={"Authorization": f"Bearer {t['agent_token']}", "X-Agent-Version": "0.1"})
     assert r.status_code == 200 and r.json() == {"accepted": 2, "rejected": []}
     got = (await client.get(f"/api/targets/{t['id']}", headers=h)).json()
-    assert got["latest"] == {"cpu_usage": 42.5, "disk_usage:/": 71}
+    assert got["latest"] == {"cpu_usage": 42.5, "disk_usage:/": 71, "agent_alive": 1}
     assert got["last_seen"] and got["agent_version"] == "0.1"
 
 
