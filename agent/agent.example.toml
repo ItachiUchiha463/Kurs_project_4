@@ -1,0 +1,5 @@
+server   = "https://vigil-demo.westeurope.cloudapp.azure.com"
+token    = "vgl_..."     # видається на сторінці об'єкта, показується один раз
+host     = "web-01"      # рівно та назва, що в Vigil
+interval = 15            # секунд, не менше 15
+disks    = []            # наприклад ["C:", "D:"]; порожньо – усі
