@@ -10,6 +10,7 @@ from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS
 from app.engine.thresholds import Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
+from app.notify import outbox
 from app.services import diagnosis
 
 log = logging.getLogger("vigil.pipeline")
@@ -124,4 +125,5 @@ async def process(db: AsyncSession, target: Target, points: list[Point]) -> list
             await diagnosis.diagnose_incident(db, c.incident, target, c.ts)
         log.info("інцидент %s", c.kind, extra={"incident_id": c.incident.id, "target_id": target.id,
                                               "metric": c.incident.metric, "severity": c.incident.severity})
+    await outbox.enqueue(db, changes)
     return changes

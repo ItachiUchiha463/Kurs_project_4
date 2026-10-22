@@ -12,6 +12,8 @@ from sqlalchemy import select, text
 
 from app.db import SessionLocal, engine
 from app.models import Target
+from app.notify import outbox, telegram
+from app.notify.commands import handle_update
 from app.services import checks
 
 log = logging.getLogger("vigil.background")
@@ -69,6 +71,40 @@ async def _scheduler_loop() -> None:
         await asyncio.sleep(TICK_S)
 
 
+async def _notify_loop() -> None:
+    while True:
+        try:
+            if bot := telegram.get_bot():
+                async with SessionLocal() as db:
+                    await outbox.deliver_pending(db, bot)
+            beats["notify"] = time.monotonic()
+        except Exception:
+            log.exception("збій відправки сповіщень")
+        await asyncio.sleep(2)
+
+
+async def _bot_loop() -> None:
+    """Long polling (ТЗ 9.1): працює і без публічної HTTPS-адреси."""
+    offset = 0
+    while True:
+        bot = telegram.get_bot()
+        if not bot:
+            beats["bot"] = time.monotonic()
+            await asyncio.sleep(30)
+            continue
+        try:
+            for update in await bot.updates(offset):
+                offset = update["update_id"] + 1
+                async with SessionLocal() as db:
+                    await handle_update(db, bot, update)
+                    await db.commit()
+            beats["bot"] = time.monotonic()
+        except Exception as e:  # мережа, 409 від другого getUpdates тощо – не зупиняємо задачу
+            log.warning("збій бота: %s", type(e).__name__)
+            beats["bot"] = time.monotonic()
+            await asyncio.sleep(5)
+
+
 async def _liveness_loop() -> None:
     while True:
         try:
@@ -98,8 +134,8 @@ class Background:
             await self._conn.close()
             self._conn = None
             return False
-        beats.update(scheduler=time.monotonic(), liveness=time.monotonic())
-        self._tasks = [asyncio.create_task(_scheduler_loop()), asyncio.create_task(_liveness_loop())]
+        beats.update({k: time.monotonic() for k in ('scheduler', 'liveness', 'notify', 'bot')})
+        self._tasks = [asyncio.create_task(f()) for f in (_scheduler_loop, _liveness_loop, _notify_loop, _bot_loop)]
         started = True
         log.info("фонові задачі запущено")
         return True

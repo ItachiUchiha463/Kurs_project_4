@@ -1,5 +1,7 @@
 import re
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 
@@ -41,3 +43,13 @@ class UserOut(BaseModel):
     full_name: str
     telegram_linked: bool = False
     notify_min_severity: str
+
+
+class ProfileIn(BaseModel):
+    notify_min_severity: Literal["warning", "critical"]
+
+
+class TelegramLinkOut(BaseModel):
+    code: str
+    url: str | None
+    expires_in_s: int
