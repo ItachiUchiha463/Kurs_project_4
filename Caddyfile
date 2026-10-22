@@ -1,0 +1,20 @@
+# HTTPS-сертифікат Caddy отримує й поновлює сам (Let's Encrypt). DOMAIN – з .env, наприклад vigil-demo.westeurope.cloudapp.azure.com
+{$DOMAIN:localhost} {
+	encode zstd gzip
+
+	header {
+		# Суворий CSP: JWT лежить у localStorage, тож скрипти допускаються лише з власного домену (ТЗ 11.1)
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000"
+	}
+
+	# /api (разом із WebSocket /api/ws) – на бекенд, решта – статика фронтенду
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}

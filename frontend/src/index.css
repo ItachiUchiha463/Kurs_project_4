@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-400.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-500.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-600.css";
+@import "@fontsource/ibm-plex-sans/cyrillic-700.css";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-sans/latin-700.css";
+@import "@fontsource/ibm-plex-mono/cyrillic-400.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  /* семантична шкала станів: колір завжди дублюється іконкою й текстом */
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-crit: var(--crit);
+  --color-crit-bg: var(--crit-bg);
+  --color-off: var(--off);
+  --color-off-bg: var(--off-bg);
+  --color-ack: var(--ack);
+  --color-ack-bg: var(--ack-bg);
+  --color-grid: var(--grid);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Токени з HTML-прототипу (docs/prototype): світла тема за замовчуванням, синій акцент */
+:root {
+  --radius: 0.5rem;
+  --background: #f4f6fa;
+  --foreground: #0f1b2d;
+  --card: #ffffff;
+  --card-foreground: #0f1b2d;
+  --popover: #ffffff;
+  --popover-foreground: #0f1b2d;
+  --primary: #1d5fd8;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f8;
+  --secondary-foreground: #0f1b2d;
+  --muted: #eef2f8;
+  --muted-foreground: #5a6a80;
+  --accent: #e7effd;
+  --accent-foreground: #164db3;
+  --destructive: #c1261a;
+  --border: #dbe2ec;
+  --input: #c5cfdd;
+  --ring: #1d5fd8;
+  --chart-1: #1d5fd8;
+  --sidebar: #f4f6fa;
+  --sidebar-foreground: #0f1b2d;
+  --sidebar-primary: #1d5fd8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e7effd;
+  --sidebar-accent-foreground: #164db3;
+  --sidebar-border: #dbe2ec;
+  --sidebar-ring: #1d5fd8;
+  --ok: #157a3a; --ok-bg: #e3f4e8;
+  --warn: #a65800; --warn-bg: #fff1d9;
+  --crit: #c1261a; --crit-bg: #fde9e7;
+  --off: #66717f; --off-bg: #eceff3;
+  --ack: #4446b8; --ack-bg: #ebebfb;
+  --grid: #e7ecf3;
+}
+
+.dark {
+  --background: #0b131f;
+  --foreground: #e5ecf6;
+  --card: #111b2a;
+  --card-foreground: #e5ecf6;
+  --popover: #111b2a;
+  --popover-foreground: #e5ecf6;
+  --primary: #5c94ff;
+  --primary-foreground: #07111f;
+  --secondary: #172335;
+  --secondary-foreground: #e5ecf6;
+  --muted: #172335;
+  --muted-foreground: #98a8bd;
+  --accent: #15284a;
+  --accent-foreground: #7aa8ff;
+  --destructive: #ff6a5c;
+  --border: #24344a;
+  --input: #33465f;
+  --ring: #5c94ff;
+  --chart-1: #5c94ff;
+  --sidebar: #0b131f;
+  --sidebar-foreground: #e5ecf6;
+  --sidebar-primary: #5c94ff;
+  --sidebar-primary-foreground: #07111f;
+  --sidebar-accent: #15284a;
+  --sidebar-accent-foreground: #7aa8ff;
+  --sidebar-border: #24344a;
+  --sidebar-ring: #5c94ff;
+  --ok: #45c072; --ok-bg: #102b1b;
+  --warn: #f2a640; --warn-bg: #36270e;
+  --crit: #ff6a5c; --crit-bg: #3a1513;
+  --off: #9aa5b3; --off-bg: #1f2a39;
+  --ack: #9497ff; --ack-bg: #1e1f45;
+  --grid: #1c2a3d;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground font-sans; font-size: 15px; line-height: 1.5; }
+  /* значення метрик не «стрибають» при оновленні */
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  h1:focus { outline: none; }  /* фокус ставиться програмно після переходу між сторінками */
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+}

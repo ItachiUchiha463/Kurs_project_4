@@ -12,7 +12,7 @@
 
 Базовий обсяг **знижений** (ТЗ розд. 1): без робочих просторів і ролей, без адмін-панелі, лише українська, звіти – екран і CSV, перевірки HTTP/TCP/ping – лише з сервера. Кожен користувач бачить тільки свої об'єкти. Простори, ролі, англійська, PDF, перевірки з агента – «Бонус», лише якщо лишиться час.
 
-Поточна ітерація – **MVP до 26.10.2026** (ТЗ 17.1; порядок збирання – `docs/ARCHITECTURE.md`, розд. 10).
+Поточна ітерація – **MVP до 26.10.2026** (код готовий і перевірений локально 22.10; лишається розгортання в Azure за docs/DEPLOY.md) (ТЗ 17.1; порядок збирання – `docs/ARCHITECTURE.md`, розд. 10).
 
 ## Стек
 
@@ -33,12 +33,22 @@ docs/          ARCHITECTURE.md, prototype/
 ## Команди
 
 ```bash
-docker compose up -d db                    # TimescaleDB на localhost:5433 (.env з .env.example)
-cd backend
-python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/alembic upgrade head         # міграції
-.venv/Scripts/python -m pytest -q          # тести (окрема БД vigil_test створюється сама)
-.venv/Scripts/uvicorn app.main:app --reload --workers 1
+docker compose up -d db                    # TimescaleDB на localhost:5433 (спершу cp .env.example .env)
+docker compose up -d --build               # увесь стек за Caddy на https://localhost (розгортання – docs/DEPLOY.md)
+
+# бекенд
+cd backend && python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"
+.venv/Scripts/alembic upgrade head && .venv/Scripts/python seed.py     # міграції й базові правила
+.venv/Scripts/python -m pytest -q                                      # тести (БД vigil_test створюється сама)
+.venv/Scripts/uvicorn app.main:app --workers 1                         # :8000
+
+# фронтенд (Vite проксіює /api разом із WebSocket на :8000)
+cd frontend && npm install && npm run dev        # :5173
+npm test && npm run build                        # vitest, tsc + збірка
+
+# агент
+cd agent && python -m venv .venv && .venv/Scripts/pip install -e ".[dev]" && .venv/Scripts/python -m pytest -q
+.venv/Scripts/python agent.py --config agent.toml
 ```
 
 ## Жорсткі правила
