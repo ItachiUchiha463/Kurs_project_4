@@ -11,6 +11,9 @@ OWNED = [
     ("DELETE", "/api/targets/{target_id}", None),
     ("POST", "/api/targets/{target_id}/agent-token", None),
     ("GET", "/api/targets/{target_id}/metrics?name=cpu_usage", None),
+    ("GET", "/api/incidents/{incident_id}", None),
+    ("POST", "/api/incidents/{incident_id}/acknowledge", None),
+    ("POST", "/api/incidents/{incident_id}/resolve", {"comment": "x"}),
 ]
 PUBLIC_WITH_PARAMS: set[str] = set()
 
@@ -19,11 +22,14 @@ async def test_other_users_resources_are_404(client, user_factory):
     a = await user_factory(email="a@example.com")
     b = await user_factory(email="b@example.com")
     t = await make_server(client, a)
+    await client.post("/api/ingest", json=[rec("cpu_usage", 99)], headers={"Authorization": f"Bearer {t['agent_token']}"})
+    [inc] = (await client.get("/api/incidents", headers=a)).json()
     for method, path, body in OWNED:
-        r = await client.request(method, path.format(target_id=t["id"]), json=body, headers=b)
+        r = await client.request(method, path.format(target_id=t["id"], incident_id=inc["id"]), json=body, headers=b)
         assert r.status_code == 404, (method, path, r.status_code)
     # а власник усе ще бачить свій об'єкт: чужі спроби нічого не видалили
     assert (await client.get(f"/api/targets/{t['id']}", headers=a)).status_code == 200
+    assert (await client.get(f"/api/incidents/{inc['id']}", headers=a)).json()["status"] == "open"
 
 
 async def test_lists_contain_only_own_data(client, user_factory):
@@ -31,6 +37,7 @@ async def test_lists_contain_only_own_data(client, user_factory):
     b = await user_factory(email="b@example.com")
     await make_server(client, a, "a-server")
     assert (await client.get("/api/targets", headers=b)).json() == []
+    assert (await client.get("/api/incidents", headers=b)).json() == []
 
 
 async def test_agent_token_of_a_cannot_write_metrics_of_b(client, user_factory):

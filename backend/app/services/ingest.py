@@ -11,6 +11,7 @@ from app.repositories import metrics as metrics_repo
 from app.repositories import targets as targets_repo
 from app.schemas.targets import IngestOut, IngestRecord, IngestRejected
 from app.security import hash_token
+from app.services import pipeline
 
 log = logging.getLogger("vigil.ingest")
 MAX_BATCH = 500
@@ -60,6 +61,8 @@ async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
     now = datetime.now(timezone.utc)
     offset = clock_offset(agent_time, now)
     rows, rejected = [], []
+    fresh_after = now - timedelta(seconds=2 * target.interval_s)
+    fresh: list[pipeline.Point] = []
     for i, rec in enumerate(records):
         ts = (rec.timestamp if rec.timestamp.tzinfo else rec.timestamp.replace(tzinfo=timezone.utc)) + offset
         reason = check_record(rec, target.name, ts, now)
@@ -67,10 +70,13 @@ async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
             rejected.append(IngestRejected(index=i, reason=reason))
             continue
         rows.append({"target_id": target.id, "name": rec.metric, "instance": rec.instance, "value": rec.value, "ts": ts})
+        if ts >= fresh_after:  # пізні записи з буфера лише зберігаються, інцидентів заднім числом не відкривають
+            fresh.append(pipeline.Point(rec.metric, rec.instance, ts, rec.value))
     await metrics_repo.insert_many(db, rows)
     target.last_seen = now
     target.agent_version = agent_version
     target.clock_offset_s = offset.total_seconds() if agent_time else None
+    await pipeline.process(db, target, fresh)
     if rejected:
         log.warning("відкинуто записи", extra={"target_id": target.id, "rejected": len(rejected)})
     return IngestOut(accepted=len(rows), rejected=rejected)

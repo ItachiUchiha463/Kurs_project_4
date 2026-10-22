@@ -40,6 +40,8 @@ async def _clean(_database):
         await conn.execute(text("TRUNCATE users, rules, metrics RESTART IDENTITY CASCADE"))
     from app.services import ingest
     ingest._last_ingest.clear()
+    from app.services import pipeline
+    pipeline._states.clear()
     yield
 
 
