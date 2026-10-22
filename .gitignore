@@ -1,0 +1,37 @@
+# секрети
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+agent.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.spec
+
+# Node / фронтенд
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# редактори й ОС
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+~$*
+
+# локальні налаштування Claude Code
+.claude/settings.local.json

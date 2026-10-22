@@ -1,0 +1,21 @@
+# Git сам визначає текстові файли й зберігає їх у репозиторії з LF
+* text=auto eol=lf
+
+# скрипти для Linux і конфіги контейнерів – завжди LF, інакше на VM: "bad interpreter"
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+Caddyfile       text eol=lf
+
+# скрипти Windows – CRLF
+*.ps1           text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# бінарні
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.exe binary

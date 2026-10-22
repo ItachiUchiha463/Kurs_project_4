@@ -1,0 +1,1121 @@
+<title>Прототип Vigil</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: робочий застосунок — бічне меню + робоча область; на телефоні меню виїжджає зверху.
+   Колір дій — синій; кольори станів (ok / warn / crit / off / ack) — окрема семантична шкала. */
+:root {
+  --bg: #f4f6fa; --surface: #ffffff; --surface-2: #eef2f8; --border: #dbe2ec; --border-strong: #c5cfdd;
+  --fg: #0f1b2d; --muted: #5a6a80; --faint: #66768b;
+  --accent: #1d5fd8; --accent-hover: #164db3; --accent-weak: #e7effd; --accent-fg: #ffffff;
+  --ok: #157a3a; --ok-bg: #e3f4e8; --warn: #a65800; --warn-bg: #fff1d9; --crit: #c1261a; --crit-bg: #fde9e7; --crit-fg: #ffffff;
+  --off: #66717f; --off-bg: #eceff3; --ack: #4446b8; --ack-bg: #ebebfb;
+  --grid: #e7ecf3; --shadow: 0 1px 2px rgba(15, 27, 45, .06), 0 4px 16px rgba(15, 27, 45, .05);
+  --font: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0b131f; --surface: #111b2a; --surface-2: #172335; --border: #24344a; --border-strong: #33465f;
+  --fg: #e5ecf6; --muted: #98a8bd; --faint: #8797ac;
+  --accent: #5c94ff; --accent-hover: #7aa8ff; --accent-weak: #15284a; --accent-fg: #07111f;
+  --ok: #45c072; --ok-bg: #102b1b; --warn: #f2a640; --warn-bg: #36270e; --crit: #ff6a5c; --crit-bg: #3a1513; --crit-fg: #07111f;
+  --off: #9aa5b3; --off-bg: #1f2a39; --ack: #9497ff; --ack-bg: #1e1f45;
+  --grid: #1c2a3d; --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0b131f; --surface: #111b2a; --surface-2: #172335; --border: #24344a; --border-strong: #33465f;
+  --fg: #e5ecf6; --muted: #98a8bd; --faint: #8797ac;
+  --accent: #5c94ff; --accent-hover: #7aa8ff; --accent-weak: #15284a; --accent-fg: #07111f;
+  --ok: #45c072; --ok-bg: #102b1b; --warn: #f2a640; --warn-bg: #36270e; --crit: #ff6a5c; --crit-bg: #3a1513; --crit-fg: #07111f;
+  --off: #9aa5b3; --off-bg: #1f2a39; --ack: #9497ff; --ack-bg: #1e1f45;
+  --grid: #1c2a3d; --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.25; }
+h1 { font-size: 24px; font-weight: 600; }
+h2 { font-size: 18px; font-weight: 600; }
+h3, .h3 { font-size: 15px; font-weight: 600; }
+h1:focus { outline: none; }  /* фокус ставиться програмно після переходу (2) */
+input, select, textarea { font-size: 16px; }  /* 5: 16 px — iPhone не масштабує сторінку при фокусі */
+button, .chart-box, tr.click { touch-action: manipulation; }  /* 6: без затримки дотику */
+.btn:active, .tcard:active, .alert-row:active, .nav-btn:active, .chip:active { transform: scale(.985); }  /* 6: відгук на натискання */
+.skip { position: absolute; left: 16px; top: -80px; z-index: 40; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: var(--r); padding: 10px 14px; font-weight: 600; }
+.skip:focus { top: calc(12px + env(safe-area-inset-top, 0px)); }  /* 1 */
+.req { color: var(--crit); }
+.err { color: var(--crit); font-size: 13px; }
+[aria-invalid="true"] { border-color: var(--crit) !important; }
+.pw { display: flex; gap: 6px; } .pw input { flex: 1; min-width: 0; } .pw-toggle { flex: none; border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--r); padding: 0 12px; font-size: 13px; color: var(--accent); min-height: 44px; }
+.search-wrap { position: relative; flex: 1 1 220px; min-width: 0; }
+.sr { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 25; list-style: none; margin: 0; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); }
+.sr li { display: flex; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 6px; cursor: pointer; }
+.sr li[aria-selected="true"], .sr li:hover { background: var(--accent-weak); }
+.th-sort { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; display: inline-flex; gap: 4px; align-items: center; }
+.th-sort:hover { color: var(--fg); }
+.backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(15 27 45 / .45); display: grid; place-items: center; padding: 16px; }
+.modal { width: 100%; max-width: 460px; padding: 20px; display: grid; gap: 14px; box-shadow: var(--shadow); }
+.btn.danger { background: var(--crit); border-color: var(--crit); color: var(--crit-fg); }
+textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); resize: vertical; font: inherit; }
+.chart-box { touch-action: pan-y; }  /* 7: вертикальна прокрутка лишається, горизонтальний рух веде підказку */
+p { margin: 0; }
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.label { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+
+/* ---------- каркас ---------- */
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 20px; min-height: 100%; max-width: 1480px; margin-inline: auto;  /* 9 */
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; }
+.side { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); align-self: start; display: flex; flex-direction: column; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; font-weight: 700; font-size: 18px; }
+.brand svg { flex: none; }
+.nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; background: none; border-radius: var(--r); text-align: left; color: var(--muted); font-weight: 500; }
+.nav-btn:hover { background: var(--surface-2); color: var(--fg); }
+.nav-btn[aria-current="page"] { background: var(--accent-weak); color: var(--accent); }
+.nav-btn .count { margin-left: auto; background: var(--crit); color: #fff; border-radius: 10px; font-size: 12px; padding: 0 7px; font-weight: 600; }
+.nav-sep { height: 1px; background: var(--border); margin: 10px 4px; }
+.proto-note { margin-top: 18px; padding: 10px; border: 1px dashed var(--border-strong); border-radius: var(--r); font-size: 12px; color: var(--muted); }
+.main { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.topbar .search { width: 100%; min-width: 0; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 7px 12px; color: var(--muted); }
+.topbar .search input { border: 0; outline: 0; background: none; width: 100%; min-width: 0; }
+.live { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: beat 2s infinite; }
+.icon-btn { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface); }
+.icon-btn:hover { border-color: var(--border-strong); }
+.avatar { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--accent-weak); color: var(--accent); font-weight: 600; font-size: 14px; }
+.menu-btn { display: none; }
+@keyframes beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+
+/* ---------- базові блоки ---------- */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--r) + 2px); }
+.panel-pad { padding: 18px; }
+.panel-head { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: var(--r); border: 1px solid var(--border-strong); background: var(--surface); font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ghost { border-color: transparent; background: none; color: var(--accent); padding-inline: 6px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 12px; font-size: 13px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 10px 14px; color: var(--muted); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; letter-spacing: .03em; text-transform: uppercase; padding: 10px 18px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 11px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+.grid { display: grid; gap: 16px; }
+
+/* ---------- стани ---------- */
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 7px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.badge svg { flex: none; }
+.s-ok { color: var(--ok); background: var(--ok-bg); }
+.s-warn { color: var(--warn); background: var(--warn-bg); }
+.s-crit { color: var(--crit); background: var(--crit-bg); }
+.s-off { color: var(--off); background: var(--off-bg); }
+.s-ack { color: var(--ack); background: var(--ack-bg); }
+.s-sup { color: var(--off); background: repeating-linear-gradient(135deg, var(--off-bg) 0 6px, transparent 6px 10px); border: 1px solid var(--border); }
+.stripe { border-left: 4px solid var(--border-strong); }
+.stripe.crit { border-left-color: var(--crit); } .stripe.warn { border-left-color: var(--warn); } .stripe.off { border-left-color: var(--off); } .stripe.ok { border-left-color: var(--ok); }
+@media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 1.6s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: .55; } }
+
+/* ---------- дашборд ---------- */
+.alert-strip { display: flex; flex-direction: column; }
+.alert-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--border); background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; width: 100%; }
+.alert-row:first-child { border-top: 0; }
+.alert-row:hover { background: var(--surface-2); }
+.alert-row .what { min-width: 0; }
+.alert-row .what b { font-weight: 600; }
+.alert-row .why { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.tile { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.tile .val { font-family: var(--mono); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tile .val small { font-size: 15px; color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.tcard { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; text-align: left; border-radius: calc(var(--r) + 2px); border: 1px solid var(--border); background: var(--surface); width: 100%; }
+.tcard:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+.tcard .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tcard .name { font-weight: 600; overflow-wrap: anywhere; }
+.tcard .kind { font-size: 12px; color: var(--muted); }
+.mets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.met { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.met .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.met .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px; }
+.met .v.crit { color: var(--crit); font-weight: 500; } .met .v.warn { color: var(--warn); font-weight: 500; }
+.spark { width: 100%; height: 28px; display: block; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--border); background: var(--surface); padding: 5px 12px; border-radius: 999px; font-size: 13px; color: var(--muted); }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+
+/* ---------- графіки ---------- */
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .gl { stroke: var(--grid); stroke-width: 1; }
+.chart .ax { fill: var(--faint); font: 11px var(--mono); }
+.chart .ln { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart .ar { fill: var(--accent); opacity: .08; }
+.chart .tw { stroke: var(--warn); stroke-dasharray: 5 4; stroke-width: 1.3; }
+.chart .tc { stroke: var(--crit); stroke-dasharray: 5 4; stroke-width: 1.3; }
+.chart .tl { font: 11px var(--mono); }
+.chart .tl.w { fill: var(--warn); } .chart .tl.c { fill: var(--crit); }
+.chart .over { fill: var(--crit); opacity: .1; }
+.chart .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+.chart .mark { stroke: var(--crit); stroke-width: 1.3; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.chart-card { padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.chart-card .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.chart-card .now { font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+
+/* ---------- інцидент ---------- */
+.inc-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.diag { border: 1px solid var(--border); border-radius: calc(var(--r) + 2px); background: var(--surface); overflow: hidden; }
+.diag .cause { padding: 18px; background: var(--accent-weak); display: flex; flex-direction: column; gap: 6px; }
+.diag .cause h2 { font-size: 20px; }
+.diag .rec { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; gap: 12px; }
+.ev { list-style: none; margin: 0; padding: 4px 0; }
+.ev li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 9px 18px; border-top: 1px solid var(--border); }
+.ev .ok { color: var(--ok); font-weight: 700; } .ev .no { color: var(--faint); font-weight: 700; }
+.ev .val { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.alt { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.timeline { list-style: none; margin: 0; padding: 6px 18px 14px; position: relative; }
+.timeline li { display: grid; grid-template-columns: 54px 14px minmax(0, 1fr); gap: 10px; padding: 8px 0; align-items: baseline; }
+.timeline .t { font-family: var(--mono); color: var(--muted); font-size: 13px; }
+.timeline .d { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); position: relative; top: 1px; }
+.timeline .d.crit { background: var(--crit); } .timeline .d.ok { background: var(--ok); } .timeline .d.ack { background: var(--ack); } .timeline .d.acc { background: var(--accent); }
+.tg { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; background: var(--surface-2); }
+.tg-bubble { background: var(--surface); border: 1px solid var(--border); border-radius: 12px 12px 12px 4px; padding: 10px 12px; font-size: 14px; max-width: 360px; }
+.tg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-width: 360px; }
+.tg-btns span { text-align: center; padding: 7px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--accent); }
+.supp { padding: 10px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- майстер ---------- */
+.steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0; flex-wrap: wrap; }
+.steps li { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.steps li b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border-strong); font-size: 13px; }
+.steps li.on { color: var(--fg); font-weight: 600; } .steps li.on b { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.steps li.done b { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+.steps .sep { width: 28px; height: 1px; background: var(--border-strong); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field input, .field select { padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); width: 100%; min-height: 44px; }
+.field .hint { font-size: 13px; color: var(--muted); }
+.form { display: grid; gap: 14px; max-width: 520px; }
+.cmd { display: flex; gap: 10px; align-items: flex-start; background: #0f1b2d; color: #d8e3f5; border-radius: var(--r); padding: 12px 14px; }
+.cmd code { flex: 1; min-width: 0; font: 13px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }  /* 10 */
+.cmd button { flex: none; background: #22324a; border: 1px solid #33465f; color: #d8e3f5; border-radius: 6px; padding: 4px 10px; font-size: 13px; }
+.wait { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px dashed var(--border-strong); border-radius: var(--r); }
+.spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--accent-weak); border-top-color: var(--accent); animation: spin 1s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin, .live i { animation: none; } }
+
+/* ---------- налаштування ---------- */
+.switch { position: relative; width: 38px; height: 22px; border-radius: 11px; border: 0; background: var(--border-strong); flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { left: 19px; }
+.rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--border); }
+.rule:first-child { border-top: 0; }
+.cond { font-family: var(--mono); font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* ---------- вхід ---------- */
+.auth { min-height: 100%; display: grid; place-items: center; padding-block: 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.auth .box { width: 100%; max-width: 400px; padding: 28px; display: flex; flex-direction: column; gap: 18px; }
+
+/* ---------- сповіщення-тост ---------- */
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--fg); color: var(--bg); padding: 11px 16px; border-radius: var(--r); font-size: 14px; box-shadow: var(--shadow); max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+.toast:empty { padding: 0; }
+/* ---------- нове: живі дані, смуга доступності, підказки, скелетони ---------- */
+.live.paused i { background: var(--warn); animation: none; } .live.stale i { background: var(--crit); animation: none; } .live.stale { color: var(--crit); }
+.link { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: inherit; text-align: left; }
+.link:hover { color: var(--accent); text-decoration: underline; }
+.uptime { display: grid; grid-template-columns: repeat(48, minmax(0, 1fr)); gap: 2px; height: 14px; }
+.uptime i { border-radius: 2px; background: var(--ok); opacity: .55; } .uptime i.warn { background: var(--warn); opacity: 1; } .uptime i.crit { background: var(--crit); opacity: 1; } .uptime i.off { background: var(--off); opacity: 1; }
+.uptime-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.summary { font-size: 17px; } .summary b { font-weight: 600; }
+.chart-box { position: relative; } .chart-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+.tip { position: absolute; top: -4px; transform: translate(-50%, -100%); background: var(--fg); color: var(--bg); font: 12px var(--mono); padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; z-index: 2; }
+.chart .cursor { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .anom { fill: var(--crit); stroke: var(--surface); stroke-width: 2; } .chart .anom-l { stroke: var(--crit); stroke-width: 1.2; } .chart .anom-t { fill: var(--crit); font: 11px var(--mono); }
+.chart-sum { font-size: 12.5px; color: var(--muted); }
+.skel { background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; border-radius: var(--r); animation: shimmer 1.2s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } } @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+.empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 48px 24px; }
+
+
+/* ---------- адаптивність ---------- */
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } .inc-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .side { position: static; display: none; }
+  .side.open { display: flex; padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--r) + 2px); }
+  .side .brand, .side .proto-note { display: none; }
+  .menu-btn { display: inline-grid; }
+  .charts { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .alert-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .alert-row > .badge { grid-column: 1 / -1; justify-self: start; }
+  .hide-sm { display: none; }
+  th, td { padding-inline: 12px; }
+  .chip, .seg button, .tabs button { min-height: 44px; } .chip { padding-inline: 16px; }  /* 16: зручно влучати пальцем */
+}
+/* симулятор збою — інструмент прототипу, пунктирна рамка відрізняє його від інтерфейсу продукту */
+.sim { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 22; width: min(340px, calc(100% - 32px)); background: var(--surface); border: 1px dashed var(--accent); border-radius: var(--r); box-shadow: var(--shadow); }
+.sim:not([open]) { width: auto; }
+.sim summary { list-style: none; cursor: pointer; min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--accent); }
+.sim summary::-webkit-details-marker { display: none; }
+.sim-body { padding: 0 14px 14px; display: grid; gap: 10px; }
+.sim-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.sim-steps li { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.sim-steps li::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border-strong); }
+.sim-steps li.done::before { background: var(--muted); border-color: var(--muted); }
+.sim-steps li.now { color: var(--fg); font-weight: 600; }
+.sim-steps li.now::before { background: var(--accent); border-color: var(--accent); }
+html { scroll-padding-bottom: 72px; }  /* прокрутка до фокуса не ховає його під згорнутий симулятор */
+.main { padding-bottom: 72px; }  /* згорнутий симулятор не закриває кінець сторінки */
+.tg-wrap { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); z-index: 24; width: min(340px, calc(100% - 32px)); }
+.tg-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r); box-shadow: var(--shadow); padding: 4px 14px 12px; display: grid; gap: 6px; }
+.tg-card.crit { border-left-color: var(--crit); } .tg-card.warn { border-left-color: var(--warn); } .tg-card.ok { border-left-color: var(--ok); }
+.tg-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+.tg-x { border: 0; background: none; color: var(--muted); width: 44px; height: 44px; margin-right: -14px; display: grid; place-items: center; }
+.tg-card p { margin: 0; font-size: 14px; }
+</style>
+
+<div id="root"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="tg-wrap" id="tg" role="status" aria-live="polite" aria-atomic="true"></div>
+<details class="sim" id="sim" hidden>
+  <summary><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l8 5-8 5z" fill="currentColor"/></svg>Симулятор збою</summary>
+  <div class="sim-body">
+    <p class="small muted">Інструмент прототипу. Сценарій: на сервері api-02 поступово закінчується оперативна пам’ять. Перегляньте дашборд, інциденти й сторінку api-02, поки він триває.</p>
+    <ol class="sim-steps" id="simsteps" aria-label="Етапи сценарію"></ol>
+    <p class="small"><span class="muted">RAM api-02 зараз:</span> <b class="num" id="simv"></b></p>
+    <div class="filters"><button class="btn primary" id="simrun">Запустити збій</button><button class="btn" id="simfix" disabled>Відновити</button></div>
+  </div>
+</details>
+
+<script>
+// ===== умовні дані прототипу =====
+const NOW = new Date(2026, 9, 22, 14, 16);
+function seeded(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+function series(base, spread, n, seed, trendTo) {
+  const r = seeded(seed); const out = []; let v = base;
+  for (let i = 0; i < n; i++) {
+    const target = trendTo != null && i > n * 0.7 ? trendTo : base;
+    v += (target - v) * 0.18 + (r() - 0.5) * spread;
+    out.push(Math.max(0, Math.min(100, v)));
+  }
+  return out;
+}
+const TARGETS = [
+  { id: "web-01", name: "web-01", type: "server", kind: "Сервер · Ubuntu 24.04", addr: "20.51.12.4", status: "crit",
+    m: { cpu: series(42, 6, 60, 3, 96), ram: series(70, 3, 60, 4), disk: series(64, .6, 60, 5) } },
+  { id: "db-01", name: "db-01", type: "server", kind: "Сервер · Ubuntu 22.04", addr: "20.51.12.9", status: "warn",
+    m: { cpu: series(36, 5, 60, 6), ram: series(80, 2, 60, 7, 88), disk: series(72, .5, 60, 8) } },
+  { id: "api-02", name: "api-02", type: "server", kind: "Сервер · Debian 12", addr: "20.51.13.2", status: "ok",
+    m: { cpu: series(22, 5, 60, 9), ram: series(46, 2, 60, 10), disk: series(41, .4, 60, 11) } },
+  { id: "backup-01", name: "backup-01", type: "server", kind: "Сервер · Windows Server 2022", addr: "20.51.14.7", status: "off", silent: "6 хв" },
+  { id: "shop", name: "shop.example.ua", type: "site", kind: "Сайт · HTTP", status: "ok", http: 200, rt: series(180, 30, 60, 12).map(v => v), rtNow: 182, uptime: "99,82 %" },
+  { id: "api-site", name: "api.example.ua", type: "site", kind: "Сайт · HTTP", status: "warn", http: 200, rtNow: 1240, uptime: "99,41 %" },
+  { id: "orders-db", name: "orders-db", type: "db", kind: "PostgreSQL · на db-01", status: "warn", conn: 84, longest: "12 с", tps: 310 },
+  { id: "cache", name: "cache", type: "db", kind: "Redis · на web-01", status: "ok", mem: 41, hit: 97, ops: 1850 },
+];
+const CONTAINERS = [
+  { name: "nginx", image: "nginx:1.27", state: "running", cpu: 4, ram: 3, restarts: 0, status: "ok" },
+  { name: "shop-api", image: "shop/api:2.4.1", state: "running", cpu: 71, ram: 38, restarts: 0, status: "warn" },
+  { name: "worker", image: "shop/worker:2.4.1", state: "running", cpu: 18, ram: 22, restarts: 0, status: "ok" },
+  { name: "cache", image: "redis:7.4", state: "running", cpu: 3, ram: 41, restarts: 0, status: "ok" },
+];
+const INCIDENTS = [
+  { id: "INC-142", sev: "crit", status: "open", target: "web-01", metric: "Завантаження CPU", value: "96,4 %", threshold: "95 %",
+    started: "14:04", age: "12 хв",
+    cause: "Перевантаження процесора сервера",
+    rec: "Знайдіть процеси з найбільшим споживанням CPU (top або Диспетчер завдань). Зараз найбільше навантажує контейнер shop-api — перевірте останній реліз або тимчасово масштабуйте сервіс.",
+    evidence: [
+      { ok: true, text: "CPU web-01, середнє за 5 хв", val: "96,4 % > 90 %" },
+      { ok: true, text: "Час відповіді shop.example.ua, середнє за 5 хв", val: "1 240 мс > 1 000 мс" },
+      { ok: true, text: "Найбільше навантажує контейнер shop-api", val: "71 % CPU" },
+    ],
+    alt: [{ name: "Мережеве перевантаження", score: "1 з 3 умов" }],
+    timeline: [
+      { t: "14:02", c: "", text: "Виявлено відхилення: CPU 91,2 %" },
+      { t: "14:04", c: "crit", text: "Інцидент відкрито — порушення тримається 2 хв" },
+      { t: "14:04", c: "acc", text: "Визначено ймовірну причину: правило «Перевантаження CPU»" },
+      { t: "14:04", c: "acc", text: "Сповіщення надіслано в Telegram" },
+    ] },
+  { id: "INC-141", sev: "warn", status: "ack", ackBy: "Ростислав К.", target: "db-01", metric: "Використання RAM", value: "88,1 %", threshold: "85 %",
+    started: "13:36", age: "40 хв",
+    cause: "Базі даних не вистачає пам’яті для кешу",
+    rec: "Частка влучань у кеш orders-db впала до 89 %. Збільште shared_buffers або додайте оперативної пам’яті серверу db-01.",
+    evidence: [
+      { ok: true, text: "RAM db-01, середнє за 15 хв", val: "88,1 % > 85 %" },
+      { ok: true, text: "Влучання в кеш orders-db, середнє за 15 хв", val: "89 % < 90 %" },
+    ],
+    alt: [{ name: "Нестача оперативної пам’яті", score: "1 з 2 умов" }],
+    timeline: [
+      { t: "13:34", c: "", text: "Виявлено відхилення: RAM 85,6 %" },
+      { t: "13:36", c: "crit", text: "Інцидент відкрито — порушення тримається 2 хв" },
+      { t: "13:36", c: "acc", text: "Сповіщення надіслано в Telegram" },
+      { t: "13:41", c: "ack", text: "Підтвердив Ростислав К. (з Telegram)" },
+    ] },
+  { id: "INC-140", sev: "crit", status: "open", target: "backup-01", metric: "Агент не надсилає дані", value: "6 хв тиші", threshold: "3 інтервали",
+    started: "14:10", age: "6 хв", suppressed: ["Контейнер backup-job не працює", "Сайт backup.example.ua недоступний"],
+    cause: "Сервер вимкнений або недоступний мережею",
+    rec: "Агент мовчить, а сервер не відповідає на ping. Перевірте, чи увімкнена віртуальна машина в Azure, і стан мережевого з’єднання.",
+    evidence: [
+      { ok: true, text: "Дані від агента backup-01", val: "немає 6 хв" },
+      { ok: true, text: "Ping backup-01", val: "100 % втрат" },
+    ],
+    alt: [{ name: "Агент збору метрик зупинено", score: "1 з 2 умов" }],
+    timeline: [
+      { t: "14:07", c: "", text: "Агент не надіслав дані 3 інтервали поспіль" },
+      { t: "14:10", c: "crit", text: "Інцидент відкрито: сервер недоступний" },
+      { t: "14:10", c: "", text: "2 інциденти залежних об’єктів приєднано до цього" },
+      { t: "14:10", c: "acc", text: "Надіслано одне сповіщення в Telegram замість трьох" },
+    ] },
+  { id: "INC-139", sev: "crit", status: "closed", target: "shop.example.ua", metric: "Доступність", value: "HTTP 502", threshold: "2 збої поспіль",
+    started: "12:08", age: "4 хв", ended: "12:12", cause: "Сервіс зупинено, сервер працює", rec: "Сервіс перезапущено, інцидент закрився автоматично.", evidence: [], alt: [], timeline: [] },
+  { id: "INC-138", sev: "warn", status: "closed", target: "orders-db", metric: "З’єднання з БД", value: "96 %", threshold: "80 %",
+    started: "вчора 18:20", age: "11 хв", ended: "18:31", cause: "Вичерпано пул з’єднань через незакриті транзакції", rec: "", evidence: [], alt: [], timeline: [] },
+];
+const THRESHOLDS = [
+  ["Завантаження CPU", "середнє за 2 хв", "80 %", "95 %", "одразу"],
+  ["Використання RAM", "середнє за 2 хв", "85 %", "95 %", "одразу"],
+  ["Заповненість диска", "поточне", "85 %", "95 %", "60 с"],
+  ["Час відповіді сайту", "середнє за 1 хв", "1 000 мс", "3 000 мс", "одразу"],
+  ["Доступність", "поточне", "—", "недоступний", "2 перевірки"],
+  ["Контейнер працює", "поточне", "—", "зупинений", "30 с"],
+  ["Перезапуски контейнера", "приріст за 10 хв", "≥ 1", "≥ 3", "одразу"],
+  ["З’єднання з БД", "поточне", "80 %", "95 %", "60 с"],
+];
+const RULES = [
+  { name: "Перевантаження CPU", cond: "час відповіді avg(5хв) > 1000 мс  І  [сервер] CPU avg(5хв) > 90 %", on: true },
+  { name: "Нестача оперативної пам’яті", cond: "RAM avg(5хв) > 90 %  І  swap > 50 %", on: true },
+  { name: "Заповнення диска", cond: "диск > 95 %", on: true },
+  { name: "Сервер вимкнений або недоступний", cond: "агент мовчить  І  ping недоступний", on: true },
+  { name: "Сервіс зупинено, сервер працює", cond: "сайт недоступний  І  [сервер] ping доступний  І  агент працює", on: true },
+  { name: "Контейнер убито через нестачу пам’яті", cond: "контейнер зупинений  І  OOM = так", on: true },
+  { name: "Вичерпано пул з’єднань", cond: "з’єднання БД > 90 %  І  завислі транзакції > 10", on: true },
+  { name: "Помилки в коді застосунку", cond: "частка помилок 5xx > 5 %  І  [сервер] CPU < 70 %", on: false },
+];
+
+// ===== стан інтерфейсу =====
+const S = { view: "login", target: "web-01", incident: "INC-142", tab: "charts", range: "1h", incFilter: "active",
+  dashFilter: "all", settingsTab: "thresholds", wizStep: 1, wizOs: "linux", wizName: "web-02", wizDone: false, menu: false,
+  paused: false, lastUpdate: Date.now(), empty: false, loading: false, focusNext: false, closing: null,
+  sort: { objects: { key: "status", dir: 1 }, incidents: { key: "sev", dir: 1 } } };
+const VIEWS = ["login", "dashboard", "objects", "object", "incidents", "incident", "reports", "settings", "add"];
+
+// ===== допоміжне =====
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// 4: 1 інцидент, 2 інциденти, 5 інцидентів (11–14 — завжди «інцидентів»)
+const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; };
+const fmt = v => (Math.round(v * 10) / 10).toString().replace(".", ",");
+const ICON = {
+  ok: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v6M8 12.5v.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  crit: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  off: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  ack: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="currentColor"/><path d="M3 14c.6-2.8 2.6-4.2 5-4.2s4.4 1.4 5 4.2" fill="currentColor"/></svg>',
+  sup: '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v8M4.5 8l3.5 3.5L11.5 8M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const STATUS_TXT = { ok: "Працює", warn: "Попередження", crit: "Критичний стан", off: "Недоступний", ack: "Підтверджено", sup: "Придушено" };
+const badge = (s, txt) => `<span class="badge s-${s}">${ICON[s]}${esc(txt || STATUS_TXT[s])}</span>`;
+const SEV_TXT = { crit: "Критичний", warn: "Попередження" };
+const incStatusBadge = i => i.status === "ack" ? badge("ack", "Підтверджено") : i.status === "closed" ? badge("ok", "Закрито") : badge(i.sev, i.id === "INC-140" ? "Недоступний" : "Відкрито");
+const targetById = id => TARGETS.find(t => t.id === id || t.name === id);
+const last = a => a[a.length - 1];
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => { t.classList.remove("show"); t.textContent = ""; }, 4000);
+}
+// 12: пряме посилання — #INC-142 відкриває картку інциденту, #web-01 — сторінку об'єкта
+const token = () => S.view === "incident" ? S.incident : S.view === "object" ? S.target : S.view;
+function fromToken(h) {
+  if (INCIDENTS.some(i => i.id === h)) return { view: "incident", incident: h };
+  if (TARGETS.some(t => t.id === h)) return { view: "object", target: h, tab: "charts" };
+  return VIEWS.includes(h) ? { view: h } : null;
+}
+// 11: скелетон на мить, як під час справжнього завантаження з API
+const SLOW = ["dashboard", "object", "incidents", "reports"];
+function go(view, extra, fromHistory) {
+  Object.assign(S, extra || {}, { view, menu: false, focusNext: true });
+  try { if (!fromHistory && location.hash !== "#" + token()) history.pushState(null, "", "#" + token()); } catch (e) {}
+  go.seen = go.seen || new Set();
+  if (SLOW.includes(view) && !go.seen.has(view)) {  // 17: лише перше відкриття — без «мигання» на кожному переході
+    go.seen.add(view);
+    S.loading = true; const ticket = go.t = (go.t || 0) + 1; render();
+    setTimeout(() => { if (go.t === ticket) { S.loading = false; render(); } }, 450);
+  } else render();
+  window.scrollTo(0, 0);
+}
+
+// ===== графіки =====
+function spark(data, status) {
+  const w = 120, h = 28, max = 100;
+  const pts = data.map((v, i) => `${(i / (data.length - 1) * w).toFixed(1)},${(h - 2 - v / max * (h - 4)).toFixed(1)}`).join(" ");
+  const col = status === "crit" ? "var(--crit)" : status === "warn" ? "var(--warn)" : "var(--accent)";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+const CHARTS = {};
+const STEP_MIN = { "1h": 1, "24h": 24, "7d": 168, "30d": 720 };
+function ago(i, n) {
+  const m = (n - 1 - i) * STEP_MIN[S.range];
+  return m === 0 ? "зараз" : m < 60 ? `−${m} хв` : m < 1440 ? `−${Math.round(m / 60)} год` : `−${Math.round(m / 1440)} дн`;
+}
+function chartBlock(id, data, opt) {
+  CHARTS[id] = { data, unit: opt.unit || "%" };
+  const n = data.length, mn = Math.min(...data), mx = Math.max(...data);
+  const over = opt.crit != null ? data.filter(v => v > opt.crit).length * STEP_MIN[S.range] : 0;
+  const sum = `за період: мін ${fmt(mn)}, макс ${fmt(mx)}, зараз ${fmt(last(data))} ${opt.unit || "%"}` + (opt.crit != null ? (over ? `, вище критичного порогу ${over} хв` : ", критичний поріг не перевищено") : "");
+  return `<div data-chwrap="${id}"><div class="chart-box" tabindex="0" data-ch="${id}" aria-label="${esc(opt.title || "Графік")}: ${esc(sum)}. Стрілки ліворуч і праворуч показують значення в точках.">
+    ${chart(data, opt, CHARTS[id])}<div class="tip" hidden></div></div><p class="chart-sum">${esc(sum)}</p></div>`;
+}
+function chart(data, { warn, crit, unit = "%", max = 100, labels, markLabel }, store) {
+  // 8: на вузькому екрані — вужчий viewBox, менше поділок; інакше підписи стискаються до ~6 px
+  const narrow = innerWidth < 600;
+  const W = narrow ? 340 : 560, H = narrow ? 220 : 200, L = narrow ? 34 : 40, R = narrow ? 40 : 46, T = 22, B = 24, iw = W - L - R, ih = H - T - B;
+  if (store) store.dims = { W, L, iw };
+  if (narrow && labels) labels = [labels[0], labels[Math.floor(labels.length / 2)], labels[labels.length - 1]];
+  const x = i => L + i / (data.length - 1) * iw, y = v => T + ih - v / max * ih;
+  const grid = (narrow ? [0, .5, 1] : [0, .25, .5, .75, 1]).map(f => { const v = max * f, yy = y(v);
+    return `<line class="gl" x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}"/><text class="ax" x="${L - 8}" y="${yy + 4}" text-anchor="end">${Math.round(v)}</text>`; }).join("");
+  const pts = data.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  let over = "";
+  if (crit != null) data.forEach((v, i) => { if (v > crit && i < data.length - 1) over += `<rect class="over" x="${x(i)}" y="${T}" width="${(iw / (data.length - 1)).toFixed(2)}" height="${ih}"/>`; });
+  const thr = (val, cls, txt) => val == null ? "" : `<line class="${cls}" x1="${L}" x2="${W - R}" y1="${y(val)}" y2="${y(val)}"/><text class="tl ${cls === "tw" ? "w" : "c"}" x="${W - R + 6}" y="${y(val) + 4}">${txt}</text>`;
+  const lbl = (labels || ["-60 хв", "-45", "-30", "-15", "зараз"]).map((t, k, arr) => `<text class="ax" x="${L + k / (arr.length - 1) * iw}" y="${H - 6}" text-anchor="${k === 0 ? "start" : k === arr.length - 1 ? "end" : "middle"}">${t}</text>`).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"><text class="ax" x="${L - 8}" y="12" text-anchor="end">${esc(unit)}</text>${grid}${over}
+    <polygon class="ar" points="${L},${T + ih} ${pts.join(" ")} ${W - R},${T + ih}"/>
+    <polyline class="ln" points="${pts.join(" ")}"/>${thr(warn, "tw", "попер.")}${thr(crit, "tc", "крит.")}
+    <circle class="dot" cx="${x(data.length - 1)}" cy="${y(last(data))}" r="3.5"/>${lbl}${anomaly()}
+    <line class="cursor" x1="0" x2="0" y1="${T}" y2="${T + ih}" visibility="hidden"/></svg>`;
+  // 7: перетин критичного порогу — вертикальна мітка, маркер і підпис, а не лише колір
+  function anomaly() {
+    if (crit == null) return "";
+    let k = -1; for (let i = data.length - 1; i > 0; i--) { if (data[i] > crit && data[i - 1] <= crit) { k = i; break; } }
+    if (k < 0) return "";
+    const xx = x(k), right = xx > L + iw * .7;
+    return `<line class="anom-l" x1="${xx}" x2="${xx}" y1="${T}" y2="${T + ih}"/><circle class="anom" cx="${xx}" cy="${y(data[k])}" r="4.5"/>
+      <text class="anom-t" x="${right ? xx - 6 : xx + 6}" y="${T + 12}" text-anchor="${right ? "end" : "start"}">${esc(markLabel || "поріг перетнуто")}</text>`;
+  }
+}
+const RANGE_LABELS = { "1h": ["-60 хв", "-45", "-30", "-15", "зараз"], "24h": ["-24 год", "-18", "-12", "-6", "зараз"], "7d": ["-7 днів", "-5", "-3", "-1", "зараз"], "30d": ["-30 днів", "-22", "-15", "-7", "зараз"] };
+
+// ===== екрани =====
+function viewLogin() {
+  return `<div class="auth"><form class="box panel" id="login" novalidate>
+    <div class="brand" style="padding:0">${LOGO}<span>Vigil</span></div>
+    <div><h1>Вхід</h1><p class="muted">Моніторинг ваших серверів і сервісів</p></div>
+    <div class="field"><label for="em">Email <span class="req" aria-hidden="true">*</span></label><input id="em" type="email" value="rostyslav@example.ua" autocomplete="username" required aria-describedby="em-err"><span class="err" id="em-err" hidden></span></div>
+    <div class="field"><label for="pw">Пароль <span class="req" aria-hidden="true">*</span></label>
+      <div class="pw"><input id="pw" type="password" value="prototype" autocomplete="current-password" required aria-describedby="pw-err"><button class="pw-toggle" type="button" id="pwt" aria-pressed="false">Показати</button></div>
+      <span class="err" id="pw-err" hidden></span></div>
+    <button class="btn primary" type="submit" style="justify-content:center">Увійти</button>
+    <button class="btn" type="button" id="newuser" style="justify-content:center">Увійти як новий користувач (без серверів)</button>
+    <div class="small muted" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" type="button" data-toast="Посилання для відновлення надіслано в прив’язаний Telegram">Забули пароль?</button>
+      <button class="btn ghost" type="button" data-toast="У прототипі реєстрація веде одразу на дашборд">Зареєструватися</button>
+    </div>
+    <p class="small muted">Прототип: дані умовні, натисніть «Увійти». Щоб побачити помилки, очистьте поле.</p>
+  </form></div>`;
+}
+const LOGO = `<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="7" fill="var(--accent)"/><path d="M5 14h4l2.5-6 3.5 11 2.5-5H21" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+function activeIncidents() { return INCIDENTS.filter(i => i.status !== "closed"); }
+
+function summarySentence() {
+  const open = INCIDENTS.filter(i => i.status === "open");
+  if (!open.length) return `<p class="summary"><b>Усе працює.</b> <span class="muted">Останній інцидент закрито о 12:12.</span></p>`;
+  const what = open.map(i => `<b>${esc(i.target)}</b> — ${esc(i.cause.toLowerCase())}`).join("; ");
+  const n = open.length, word = plural(n, "проблема потребує", "проблеми потребують", "проблем потребують");
+  return `<p class="summary"><b>${n} ${word} уваги:</b> ${what}.</p>`;
+}
+function viewSkeleton() {
+  const b = (h, w = "100%") => `<div class="skel" style="height:${h}px;width:${w}"></div>`;
+  return `<div aria-busy="true" aria-label="Завантаження" class="grid">${b(30, "40%")}${b(120)}<div class="tiles">${b(78).repeat(5)}</div><div class="cards">${b(150).repeat(4)}</div></div>`;
+}
+function viewEmpty() {
+  return `<div class="page-head"><h1>Дашборд</h1></div>
+  <section class="panel empty"><svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><rect x="8" y="10" width="40" height="14" rx="3" fill="none" stroke="var(--border-strong)" stroke-width="2"/><rect x="8" y="32" width="40" height="14" rx="3" fill="none" stroke="var(--border-strong)" stroke-width="2"/><circle cx="16" cy="17" r="2" fill="var(--accent)"/><circle cx="16" cy="39" r="2" fill="var(--border-strong)"/></svg>
+    <h2>Підключіть перший сервер</h2><p class="muted" style="max-width:46ch">Додайте сервер — система видасть команду для встановлення агента. Перші метрики з’являться тут менш ніж за хвилину.</p>
+    <button class="btn primary" data-go="add">+ Додати сервер</button><p class="small muted">Сайт без сервера теж можна додати — лише за адресою.</p></section>`;
+}
+function uptimeSegs(t) {
+  const r = seeded(t.id.length * 97 + t.id.charCodeAt(0)), seg = Array(48).fill("ok");
+  if (r() > .4) seg[Math.floor(r() * 40)] = "warn";
+  if (t.status === "crit") { seg[46] = "crit"; seg[47] = "crit"; seg[31] = "warn"; }
+  if (t.status === "warn") seg[47] = "warn";
+  if (t.status === "off") seg[47] = "off";
+  return seg;
+}
+// 13: смуга доступності за 24 год — фірмовий елемент: видно не лише «зараз», а й «як було»
+function uptimeStrip(t) {
+  const seg = uptimeSegs(t), bad = seg.filter(x => x === "crit" || x === "off").length;
+  const pct = fmt(100 - bad / 48 * 100);
+  return `<span><span class="uptime" role="img" aria-label="Доступність за 24 години: ${pct} %, проблемних інтервалів: ${seg.filter(x => x !== "ok").length}">${seg.map((x, k) =>
+    `<i class="${x === "ok" ? "" : x}" title="${String(Math.floor(k / 2)).padStart(2, "0")}:${k % 2 ? "30" : "00"} — ${STATUS_TXT[x]}"></i>`).join("")}</span>
+    <span class="uptime-meta"><span>24 год тому</span><span class="num">${pct} %</span><span>зараз</span></span></span>`;
+}
+function viewDashboard() {
+  if (S.empty) return viewEmpty();
+  const act = activeIncidents();
+  const counts = { all: TARGETS.length, ok: TARGETS.filter(t => t.status === "ok").length, prob: TARGETS.filter(t => t.status === "warn" || t.status === "crit").length, off: TARGETS.filter(t => t.status === "off").length };
+  const order = { crit: 0, off: 1, warn: 2, ok: 3 };
+  const list = TARGETS.filter(t => S.dashFilter === "all" || t.type === S.dashFilter).sort((a, b) => order[a.status] - order[b.status]);
+  return `
+  <div class="page-head"><div><h1>Дашборд</h1><p class="muted small">${TARGETS.length} ${plural(TARGETS.length, "об’єкт", "об’єкти", "об’єктів")}</p></div>
+    <button class="btn primary" data-go="add">+ Додати сервер</button></div>
+  ${summarySentence()}
+  <section class="panel alert-strip" aria-label="Активні інциденти">
+    <div class="panel-head"><h2>Активні інциденти <span class="muted num">${act.length}</span></h2><button class="btn ghost" data-go="incidents">Усі інциденти →</button></div>
+    ${act.map(i => `<button class="alert-row stripe ${i.status === "ack" ? "" : i.sev}" data-inc="${i.id}">
+      ${i.status === "ack" ? badge("ack", "Підтверджено") : badge(i.sev, SEV_TXT[i.sev])}
+      <span class="what"><b>${esc(i.target)}</b> · ${esc(i.metric)} <span class="num">${esc(i.value)}</span>
+        <span class="why" style="display:block">Причина: ${esc(i.cause)}${i.suppressed ? ` · +${i.suppressed.length} пов’язаних` : ""}</span></span>
+      <span class="muted small num" title="Відкрито 22.10.2026 о ${esc(i.started)}">${esc(i.age)}</span></button>`).join("")}
+  </section>
+  <section class="tiles" aria-label="Підсумок">
+    ${tile("Об’єктів", counts.all)}${tile("Працюють", counts.ok, "ok")}${tile("З проблемами", counts.prob, "warn")}${tile("Недоступні", counts.off, "off")}
+    <div class="panel tile"><span class="label">Доступність за 30 днів</span><span class="val">99,74<small> %</small></span></div>
+  </section>
+  <section class="grid" aria-label="Об’єкти">
+    <div class="filters">${[["all", "Усі"], ["server", "Сервери"], ["site", "Сайти"], ["db", "Бази даних"]].map(([k, t]) =>
+      `<button class="chip" aria-pressed="${S.dashFilter === k}" data-dash="${k}">${t}</button>`).join("")}<span class="muted small" style="margin-left:auto">Спершу об’єкти з проблемами</span></div>
+    <div class="cards">${list.map(card).join("")}</div>
+  </section>`;
+}
+function tile(label, val, s) {
+  return `<div class="panel tile"><span class="label">${label}</span><span class="val" ${s ? `style="color:var(--${s === "ok" ? "fg" : s})"` : ""}>${val}</span></div>`;
+}
+function card(t) {
+  let body;
+  if (t.type === "server" && t.m) {
+    const c = last(t.m.cpu), r = last(t.m.ram), d = last(t.m.disk);
+    const cl = (v, w, k) => v > k ? "crit" : v > w ? "warn" : "";
+    body = `<div class="mets">
+      <div class="met"><span class="k">CPU</span><span class="v ${cl(c, 80, 95)}" data-v="${t.id}:cpu">${fmt(c)}%</span></div>
+      <div class="met"><span class="k">RAM</span><span class="v ${cl(r, 85, 95)}" data-v="${t.id}:ram">${fmt(r)}%</span></div>
+      <div class="met"><span class="k">Диск</span><span class="v ${cl(d, 85, 95)}" data-v="${t.id}:disk">${fmt(d)}%</span></div></div><span data-sp="${t.id}">${spark(t.m.cpu, t.status)}</span>`;
+  } else if (t.type === "server") {
+    body = `<p class="small muted">Агент не надсилає дані ${t.silent}. Останні значення: CPU 12 %, RAM 40 %.</p>`;
+  } else if (t.type === "site") {
+    body = `<div class="mets"><div class="met"><span class="k">HTTP</span><span class="v">${t.http}</span></div>
+      <div class="met"><span class="k">Відповідь</span><span class="v ${t.rtNow > 1000 ? "warn" : ""}">${t.rtNow.toLocaleString("uk-UA")} мс</span></div>
+      <div class="met"><span class="k">30 днів</span><span class="v">${t.uptime}</span></div></div>`;
+  } else if (t.conn != null) {
+    body = `<div class="mets"><div class="met"><span class="k">З’єднання</span><span class="v ${t.conn > 80 ? "warn" : ""}">${t.conn}%</span></div>
+      <div class="met"><span class="k">Найдовший</span><span class="v">${t.longest}</span></div><div class="met"><span class="k">TPS</span><span class="v">${t.tps}</span></div></div>`;
+  } else {
+    body = `<div class="mets"><div class="met"><span class="k">Пам’ять</span><span class="v">${t.mem}%</span></div>
+      <div class="met"><span class="k">Влучання</span><span class="v">${t.hit}%</span></div><div class="met"><span class="k">Оп/с</span><span class="v">${t.ops.toLocaleString("uk-UA")}</span></div></div>`;
+  }
+  return `<button class="tcard stripe ${t.status}" data-target="${t.id}">
+    <span class="top"><span><span class="name">${esc(t.name)}</span><br><span class="kind">${esc(t.kind)}</span></span>${badge(t.status)}</span>${body}${uptimeStrip(t)}</button>`;
+}
+
+const ORD = { status: { crit: 0, off: 1, warn: 2, ok: 3 }, sev: { crit: 0, warn: 1 }, ist: { open: 0, ack: 1, closed: 2 } };
+function sortBy(list, table, get) {
+  const { key, dir } = S.sort[table];
+  return [...list].sort((a, b) => { const x = get(a, key), y = get(b, key); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+}
+// 16: заголовок-кнопка з aria-sort
+function th(table, key, label, cls = "") {
+  const st = S.sort[table], on = st.key === key;
+  return `<th class="${cls}" aria-sort="${on ? (st.dir > 0 ? "ascending" : "descending") : "none"}"><button class="th-sort" data-sort="${table}:${key}">${label}<span aria-hidden="true">${on ? (st.dir > 0 ? "↑" : "↓") : "↕"}</span></button></th>`;
+}
+function viewObjects() {
+  return `<div class="page-head"><h1>Об’єкти</h1><button class="btn primary" data-go="add">+ Додати сервер</button></div>
+  <section class="panel"><div class="table-wrap"><table>
+    <thead><tr>${th("objects", "name", "Назва")}<th>Тип</th>${th("objects", "status", "Стан")}<th class="hide-sm">Адреса</th><th class="hide-sm">Ключовий показник</th></tr></thead>
+    <tbody>${sortBy(TARGETS, "objects", (t, k) => k === "status" ? ORD.status[t.status] : t.name).map(t => `<tr class="click" data-target="${t.id}">
+      <td><button class="link" data-target="${t.id}">${esc(t.name)}</button></td><td class="muted">${esc(t.kind)}</td><td>${badge(t.status)}</td>
+      <td class="hide-sm num muted">${esc(t.addr || "—")}</td>
+      <td class="hide-sm num">${t.m ? "CPU " + fmt(last(t.m.cpu)) + " %" : t.rtNow ? t.rtNow.toLocaleString("uk-UA") + " мс" : t.conn ? "з’єднання " + t.conn + " %" : t.mem ? "пам’ять " + t.mem + " %" : "немає даних"}</td></tr>`).join("")}</tbody>
+  </table></div></section>`;
+}
+
+function viewObject() {
+  const t = targetById(S.target) || TARGETS[0];
+  const tabs = [["charts", "Графіки"], ["containers", "Контейнери"], ["dbs", "Бази даних"], ["incidents", "Інциденти"]];
+  let content = "";
+  if (S.tab === "charts") {
+    if (!t.m) content = `<div class="panel panel-pad muted">Для цього об’єкта графіки ресурсів недоступні — агент не надсилає дані.</div>`;
+    else content = `<div class="filters"><div class="seg" role="group" aria-label="Період">${Object.keys(RANGE_LABELS).map(k =>
+      `<button aria-pressed="${S.range === k}" data-range="${k}">${{ "1h": "1 год", "24h": "24 год", "7d": "7 днів", "30d": "30 днів" }[k]}</button>`).join("")}</div></div>
+      <div class="charts">
+        ${chartCard(t.id + ":cpu", "Завантаження CPU", t.m.cpu, 80, 95)}${chartCard(t.id + ":ram", "Використання RAM", t.m.ram, 85, 95)}
+        ${chartCard(t.id + ":disk", "Заповненість диска «/»", t.m.disk, 85, 95)}${chartCard(t.id + ":net", "Мережа, вхідний трафік", NETDATA, null, null, "КБ/с")}
+      </div>`;
+  } else if (S.tab === "containers") {
+    content = `<section class="panel"><div class="panel-head"><h2>Docker-контейнери</h2><span class="muted small">Знайдено автоматично агентом</span></div><div class="table-wrap"><table>
+      <thead><tr><th>Контейнер</th><th class="hide-sm">Образ</th><th>Стан</th><th>CPU</th><th>RAM</th><th class="hide-sm">Перезапуски</th></tr></thead>
+      <tbody>${CONTAINERS.map(c => `<tr><td><b>${c.name}</b></td><td class="hide-sm mono small muted">${c.image}</td><td>${badge(c.status, c.status === "ok" ? "Працює" : "Високе CPU")}</td>
+      <td class="num">${c.cpu} %</td><td class="num">${c.ram} %</td><td class="hide-sm num">${c.restarts}</td></tr>`).join("")}</tbody></table></div></section>`;
+  } else if (S.tab === "dbs") {
+    content = `<div class="cards">${TARGETS.filter(x => x.type === "db").map(card).join("")}</div>`;
+  } else {
+    content = incTable(INCIDENTS.filter(i => i.target === t.name));
+  }
+  return `<div><button class="btn ghost" data-go="objects">← Об’єкти</button></div>
+  <div class="page-head"><div><h1>${esc(t.name)}</h1><p class="muted small">${esc(t.kind)}${t.addr ? " · " + t.addr : ""}</p></div>${badge(t.status)}</div>
+  <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.tab === k}" data-tab="${k}">${l}</button>`).join("")}</div>
+  ${content}`;
+}
+const NETDATA = series(30, 8, 60, 21);
+function chartCard(id, title, data, warn, crit, unit = "%") {
+  return `<div class="panel chart-card"><div class="hd"><h2 class="h3">${title}</h2><span class="now" data-now="${id}">${fmt(last(data))} ${unit}</span></div>
+    ${chartBlock(id, data, { warn, crit, unit, title, labels: RANGE_LABELS[S.range] })}</div>`;
+}
+
+function incTable(list) {
+  if (!list.length) return `<div class="panel panel-pad muted">Інцидентів немає.</div>`;
+  return `<section class="panel"><div class="table-wrap"><table>
+    <thead><tr>${th("incidents", "sev", "Рівень")}${th("incidents", "target", "Об’єкт")}<th class="hide-sm">Метрика</th>${th("incidents", "status", "Статус")}<th class="hide-sm">Початок</th>${th("incidents", "age", "Тривалість")}</tr></thead>
+    <tbody>${sortBy(list, "incidents", (i, k) => k === "sev" ? ORD.sev[i.sev] : k === "status" ? ORD.ist[i.status] : k === "age" ? parseInt(i.age) : i.target).map(i => `<tr class="click" data-inc="${i.id}"><td>${badge(i.sev, SEV_TXT[i.sev])}</td><td><button class="link" data-inc="${i.id}">${esc(i.target)}</button><br><span class="small muted">${esc(i.cause)}</span></td>
+      <td class="hide-sm">${esc(i.metric)} <span class="num muted">${esc(i.value)}</span></td><td>${incStatusBadge(i)}</td>
+      <td class="hide-sm num muted">${esc(i.started)}</td><td class="num" title="Відкрито 22.10.2026 о ${esc(i.started)}">${esc(i.age)}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+function viewIncidents() {
+  const f = S.incFilter;
+  const list = INCIDENTS.filter(i => f === "all" || (f === "active" ? i.status !== "closed" : i.status === f));
+  return `<div class="page-head"><h1>Інциденти</h1></div>
+  <div class="filters">${[["active", "Активні"], ["open", "Відкриті"], ["ack", "Підтверджені"], ["closed", "Закриті"], ["all", "Усі"]].map(([k, l]) =>
+    `<button class="chip" aria-pressed="${f === k}" data-incf="${k}">${l}</button>`).join("")}</div>
+  ${incTable(list)}`;
+}
+
+function viewIncident() {
+  const i = INCIDENTS.find(x => x.id === S.incident);
+  const t = targetById(i.target);
+  const data = t && t.m ? (i.metric.includes("RAM") ? t.m.ram : t.m.cpu) : null;
+  const canAct = i.status !== "closed";
+  return `<div><button class="btn ghost" data-go="incidents">← Інциденти</button></div>
+  <div class="page-head"><div><p class="label">${i.id} · відкрито о ${esc(i.started)}</p><h1>${esc(i.target)}: ${esc(i.metric)}</h1>
+    <p class="muted">Значення <span class="num">${esc(i.value)}</span>, поріг <span class="num">${esc(i.threshold)}</span> · триває <span class="num">${esc(i.age)}</span></p></div>
+    <div class="filters">${badge(i.sev, SEV_TXT[i.sev])}${incStatusBadge(i)}</div></div>
+  ${canAct ? `<div class="filters">
+    <button class="btn primary" data-ack="${i.id}" ${i.status === "ack" ? "disabled" : ""}>${i.status === "ack" ? "Підтверджено: " + esc(i.ackBy) : "Підтвердити — я займаюся"}</button>
+    <button class="btn" data-close="${i.id}" id="closebtn">Закрити вручну</button></div>` : ""}
+  ${S.closing === i.id ? `<div class="backdrop"><div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <h2 id="mt">Закрити ${i.id} вручну?</h2>
+    <p class="muted">Інцидент закриється, навіть якщо значення ще не повернулося в норму. Коментар з’явиться в хронології — колеги побачать, чому його закрито.</p>
+    <div class="field"><label for="cm">Коментар <span class="req" aria-hidden="true">*</span></label><textarea id="cm" rows="3" required aria-describedby="cm-err"></textarea><span class="err" id="cm-err" hidden></span></div>
+    <div class="filters" style="justify-content:flex-end"><button class="btn" data-modal="cancel">Скасувати</button><button class="btn danger" data-modal="confirm">Закрити інцидент</button></div>
+  </div></div>` : ""}
+  <div class="inc-layout">
+    <div class="grid">
+      <section class="diag" aria-label="Діагностика">
+        <div class="cause"><span class="label" style="color:var(--accent)">Ймовірна причина</span><h2>${esc(i.cause)}</h2></div>
+        ${i.rec ? `<div class="rec"><span class="label" style="flex:none;padding-top:2px">Що зробити</span><p>${esc(i.rec)}</p></div>` : ""}
+        ${i.evidence.length ? `<div class="panel-head" style="border-top:1px solid var(--border);border-bottom:0;padding-bottom:4px"><h3>На чому ґрунтується висновок</h3><span class="small muted">правило спрацювало повністю</span></div>
+        <ul class="ev">${i.evidence.map(e => `<li><span class="${e.ok ? "ok" : "no"}">${e.ok ? "✓" : "–"}</span><span>${esc(e.text)}</span><span class="val">${esc(e.val)}</span></li>`).join("")}</ul>` : ""}
+        ${i.alt.map(a => `<div class="alt"><span class="muted">Можлива причина: ${esc(a.name)}</span><span class="num muted">${esc(a.score)}</span></div>`).join("")}
+        ${i.suppressed ? `<div class="supp">${badge("sup", "+" + i.suppressed.length + " пов’язаних")}<span class="small muted">${i.suppressed.map(esc).join(" · ")} — без окремих сповіщень</span></div>` : ""}
+      </section>
+      ${data ? `<section class="panel chart-card"><div class="hd"><h2 class="h3">${esc(i.metric)} навколо моменту збою</h2><span class="now">${esc(i.value)}</span></div>
+        ${chartBlock("inc:" + i.id, data, { warn: i.metric.includes("RAM") ? 85 : 80, crit: 95, title: i.metric, markLabel: "інцидент " + i.started })}</section>` : ""}
+    </div>
+    <div class="grid">
+      <section class="panel"><div class="panel-head"><h2>Хронологія</h2></div>
+        <ol class="timeline">${(i.timeline.length ? i.timeline : [{ t: i.started, c: "crit", text: "Інцидент відкрито" }, { t: i.ended || "", c: "ok", text: "Значення повернулося в норму, інцидент закрито" }]).map(e =>
+          `<li><span class="t">${esc(e.t)}</span><span class="d ${e.c}"></span><span>${esc(e.text)}</span></li>`).join("")}</ol></section>
+      <section class="panel" style="overflow:hidden"><div class="panel-head"><h2>Повідомлення в Telegram</h2><span class="small muted">так його бачить черговий</span></div>
+        <div class="tg"><div class="tg-bubble"><b style="color:var(--${i.sev})">${i.sev === "crit" ? "🔴 КРИТИЧНО" : "🟠 ПОПЕРЕДЖЕННЯ"}</b> · ${esc(i.target)}<br>${esc(i.metric)}: <span class="num">${esc(i.value)}</span> (поріг ${esc(i.threshold)}) · ${esc(i.started)}<br>
+          <span class="muted">Ймовірна причина: ${esc(i.cause.toLowerCase())}.</span></div>
+          <div class="tg-btns"><span>✅ Підтвердити</span><span>🔗 Відкрити</span></div></div></section>
+    </div>
+  </div>`;
+}
+
+function viewAdd() {
+  const st = S.wizStep;
+  const step = (n, l) => `<li class="${st === n ? "on" : st > n ? "done" : ""}"><b>${st > n ? "✓" : n}</b>${l}</li>`;
+  const token = "vgl_7Q2k9XbP4mN8rT1z";
+  const cmd = S.wizOs === "linux"
+    ? `curl -fsSL https://vigil-demo.westeurope.cloudapp.azure.com/install.sh | sudo bash -s -- --token ${token}`
+    : `iwr https://vigil-demo.westeurope.cloudapp.azure.com/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token ${token}`;
+  let body;
+  if (st === 1) body = `<form class="form" id="wiz1" novalidate>
+      <div class="field"><label for="srv">Назва сервера <span class="req" aria-hidden="true">*</span></label><input id="srv" value="${esc(S.wizName)}" required aria-describedby="srv-hint srv-err"><span class="hint" id="srv-hint">Як він відображатиметься на дашборді</span><span class="err" id="srv-err" hidden></span></div>
+      <div class="field"><label for="os">Операційна система</label><select id="os"><option value="linux" ${S.wizOs === "linux" ? "selected" : ""}>Linux</option><option value="windows" ${S.wizOs === "windows" ? "selected" : ""}>Windows</option></select></div>
+      <div class="field"><label for="ping">Публічна адреса для ping-перевірки (необов’язково)</label><input id="ping" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="наприклад, 20.51.12.11" aria-describedby="ping-err"><span class="err" id="ping-err" hidden></span></div>
+      <div><button class="btn primary" type="submit">Далі</button></div></form>`;
+  else if (st === 2) body = `<div class="form" style="max-width:720px">
+      <p>Виконайте цю команду на сервері <b>${esc(S.wizName)}</b>. Вона встановить агент і запустить його як ${S.wizOs === "linux" ? "службу systemd" : "завдання Планувальника Windows"}.</p>
+      <div class="cmd"><code id="cmdtxt">${esc(cmd)}</code><button id="copy" type="button">Скопіювати</button></div>
+      <p class="small muted">Токен <span class="mono">${token.slice(0, 8)}…</span> показується лише зараз. Агент лише надсилає дані — вхідних портів відкривати не треба.</p>
+      <div class="filters"><button class="btn" data-wiz="1">Назад</button><button class="btn primary" data-wiz="3">Я виконав команду</button></div></div>`;
+  else body = S.wizDone
+    ? `<div class="wait" style="border-style:solid;border-color:var(--ok)">${badge("ok", "Готово")}<div><b>Перші дані від ${esc(S.wizName)} отримано</b><p class="small muted num">CPU 12 % · RAM 34 % · диск «/» 41 % · знайдено 3 контейнери</p></div></div>
+       <div><button class="btn primary" data-target="web-01">Перейти до сервера</button></div>`
+    : `<div class="wait"><span class="spin" aria-hidden="true"></span><div><b>Очікуємо дані від агента…</b><p class="small muted">Зазвичай це займає до 30 секунд після запуску команди.</p></div></div>`;
+  return `<div><button class="btn ghost" data-go="dashboard">← Дашборд</button></div>
+  <div class="page-head"><h1>Додати сервер</h1></div>
+  <ol class="steps">${step(1, "Дані сервера")}<li class="sep" aria-hidden="true"></li>${step(2, "Встановлення агента")}<li class="sep" aria-hidden="true"></li>${step(3, "Перші дані")}</ol>
+  <section class="panel panel-pad">${body}</section>`;
+}
+
+function viewReports() {
+  const rows = [["shop.example.ua", "99,82 %", 2, "4 хв"], ["api.example.ua", "99,41 %", 5, "11 хв"], ["web-01", "99,95 %", 3, "6 хв"], ["db-01", "100,00 %", 1, "—"], ["backup-01", "98,70 %", 4, "38 хв"], ["orders-db", "99,97 %", 2, "9 хв"]];
+  return `<div class="page-head"><div><h1>Звіти</h1><p class="muted small">Період: 1–22 жовтня 2026</p></div>
+    <div class="filters"><div class="seg" role="group" aria-label="Період"><button aria-pressed="false">7 днів</button><button aria-pressed="true">Цей місяць</button><button aria-pressed="false">30 днів</button></div>
+    <button class="btn" data-toast="Звіт сформовано у CSV — у прототипі файл не завантажується">Експорт CSV</button></div></div>
+  <section class="tiles">${tile("Доступність", "99,74 %")}${tile("Інцидентів", 17)}${tile("Критичних", 6, "crit")}
+    <div class="panel tile"><span class="label">Сер. час виявлення</span><span class="val">2<small> хв</small></span></div>
+    <div class="panel tile"><span class="label">Сер. час відновлення</span><span class="val">14<small> хв</small></span></div></section>
+  <section class="panel"><div class="panel-head"><h2>Доступність сервісів</h2></div><div class="table-wrap"><table>
+    <thead><tr><th>Об’єкт</th><th>Доступність</th><th>Інцидентів</th><th>Сер. відновлення</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td><b>${r[0]}</b></td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td></tr>`).join("")}</tbody></table></div></section>
+  <section class="panel panel-pad"><h2 style="margin-bottom:10px">Найчастіші причини</h2>
+    ${[["Перевантаження CPU", 6], ["Сервіс зупинено, сервер працює", 4], ["Вичерпано пул з’єднань", 3], ["Заповнення диска", 2]].map(([n, c]) =>
+      `<div style="display:grid;grid-template-columns:minmax(0,1fr) 140px 28px;gap:12px;align-items:center;padding:6px 0"><span>${n}</span>
+       <span style="height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden"><i style="display:block;height:100%;width:${c / 6 * 100}%;background:var(--accent)"></i></span><span class="num">${c}</span></div>`).join("")}</section>`;
+}
+
+function viewSettings() {
+  const tabs = [["thresholds", "Пороги"], ["rules", "Правила"], ["notify", "Сповіщення"]];
+  let c;
+  if (S.settingsTab === "thresholds") c = `<section class="panel"><div class="panel-head"><h2>Типові порогові значення</h2><span class="small muted">Діють для всіх ваших об’єктів</span></div><div class="table-wrap"><table>
+    <thead><tr><th>Метрика</th><th>Як рахується</th><th>Попередження</th><th>Критичний</th><th>Тривалість</th></tr></thead>
+    <tbody>${THRESHOLDS.map(r => `<tr><td><b>${r[0]}</b></td><td class="muted">${r[1]}</td><td class="num" style="color:var(--warn)">${r[2]}</td><td class="num" style="color:var(--crit)">${r[3]}</td><td class="num">${r[4]}</td></tr>`).join("")}</tbody></table></div></section>`;
+  else if (S.settingsTab === "rules") c = `<section class="panel"><div class="panel-head"><h2>Правила логічного виведення</h2><span class="small muted">Якщо всі умови виконуються — система називає причину</span></div>
+    ${RULES.map((r, k) => `<div class="rule"><div><b>${esc(r.name)}</b><div class="cond">${esc(r.cond)}</div></div>
+      <button class="switch" role="switch" aria-checked="${r.on}" aria-label="${esc(r.name)}" data-rule="${k}"></button></div>`).join("")}</section>`;
+  else c = `<section class="panel panel-pad grid" style="max-width:640px">
+    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><h2>Telegram</h2><p class="small muted">Особистий чат <span class="mono">@rostyslav_k</span> прив’язано 18.10.2026</p></div>${badge("ok", "Підключено")}</div>
+    <div class="field"><label for="minsev">Надсилати, починаючи з рівня</label><select id="minsev"><option>Попередження</option><option>Лише критичні</option></select></div>
+    <div class="field"><span class="label">Події</span>${["Виникнення інциденту", "Зміна рівня критичності", "Відновлення сервісу"].map((e, k) =>
+      `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ev${k}" checked> ${e}</label>`).join("")}</div>
+    <div class="filters"><button class="btn" data-toast="Тестове повідомлення надіслано в Telegram">Надіслати тестове повідомлення</button><button class="btn ghost" data-toast="У прототипі прив’язка не змінюється">Відв’язати</button></div></section>`;
+  return `<div class="page-head"><h1>Налаштування</h1></div>
+  <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${S.settingsTab === k}" data-stab="${k}">${l}</button>`).join("")}</div>${c}`;
+}
+
+// ===== каркас і маршрутизація =====
+const NAV = [["dashboard", "Дашборд", '<path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z"/>'],
+  ["objects", "Об’єкти", '<rect x="3" y="3" width="14" height="5" rx="1.5"/><rect x="3" y="12" width="14" height="5" rx="1.5"/>'],
+  ["incidents", "Інциденти", '<path d="M10 3l8 14H2z"/><path d="M10 8v4"/>'],
+  ["reports", "Звіти", '<path d="M4 16V9M10 16V4M16 16v-5"/>'],
+  ["settings", "Налаштування", '<circle cx="10" cy="10" r="3"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.3 4.3l2.1 2.1M13.6 13.6l2.1 2.1M4.3 15.7l2.1-2.1M13.6 6.4l2.1-2.1"/>']];
+function shell(inner) {
+  const sec = { object: "objects", incident: "incidents", add: "dashboard" }[S.view] || S.view;
+  return `<button class="skip" id="skip">Перейти до вмісту</button><div class="app">
+    <nav class="side ${S.menu ? "open" : ""}" aria-label="Головне меню">
+      <div class="brand">${LOGO}<span>Vigil</span></div>
+      ${NAV.map(([k, l, ic]) => `<button class="nav-btn" data-go="${k}" ${sec === k ? 'aria-current="page"' : ""}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${l}
+        ${k === "incidents" && !S.empty ? (n => `<span class="count pulse" aria-label="${n} ${plural(n, "відкритий інцидент", "відкриті інциденти", "відкритих інцидентів")}">${n}</span>`)(activeIncidents().filter(i => i.status === "open").length) : ""}</button>`).join("")}
+      <div class="proto-note">Прототип інтерфейсу. Дані умовні, частина дій лише показує, що станеться.</div>
+    </nav>
+    <main class="main" id="main-content" tabindex="-1">
+      <div class="topbar">
+        <button class="icon-btn menu-btn" id="menu" aria-label="Меню" aria-expanded="${S.menu}"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <div class="search-wrap"><label class="search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input id="q" role="combobox" aria-expanded="false" aria-controls="sr" aria-autocomplete="list" autocomplete="off" placeholder="Знайти сервер, сайт або інцидент" aria-label="Пошук"></label>
+          <ul id="sr" class="sr" role="listbox" aria-label="Результати пошуку" hidden></ul></div>
+        <span class="live" id="live" title="Дані надходять через WebSocket"><i></i><span id="livetxt">${liveText()}</span></span>
+        <button class="icon-btn" id="pause" aria-pressed="${S.paused}" aria-label="${S.paused ? "Відновити оновлення" : "Призупинити оновлення"}">${S.paused
+          ? '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l8 5-8 5z" fill="currentColor"/></svg>'
+          : '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'}</button>
+        <button class="icon-btn" id="theme" aria-label="Перемкнути тему"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M15 11.5A6.5 6.5 0 016.5 3a6.5 6.5 0 108.5 8.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+        <span class="avatar" title="Ростислав К.">РК</span>
+      </div>
+      ${inner}
+    </main></div>`;
+}
+const RENDER = { dashboard: viewDashboard, objects: viewObjects, object: viewObject, incidents: viewIncidents, incident: viewIncident, reports: viewReports, settings: viewSettings, add: viewAdd };
+function render() {
+  $("#root").innerHTML = S.view === "login" ? viewLogin() : shell(S.loading ? viewSkeleton() : RENDER[S.view]());
+  paintLive();
+  if (S.focusNext && !S.loading) {  // 2: після переходу фокус — на заголовок нової сторінки
+    const h = $("main h1"); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+    S.focusNext = false;
+  }
+  $("#sim").hidden = S.view === "login";
+  if (S.closing) {
+    const b = $(".backdrop"); if (b) { $("#root").append(b); $(".app").inert = $("#skip").inert = true; }
+    $("#cm")?.focus();
+  }
+}
+// 2: «Наживо» лише коли дані справді свіжі; є пауза й стан «застаріли»
+function liveText() {
+  if (S.paused) return "Пауза";
+  const sec = Math.round((Date.now() - S.lastUpdate) / 1000);
+  return sec > 30 ? "Дані застаріли" : `Наживо · ${sec < 2 ? "щойно" : sec + " с тому"}`;
+}
+function paintLive() {
+  const el = $("#live"); if (!el) return;
+  const stale = !S.paused && Date.now() - S.lastUpdate > 30000;
+  el.classList.toggle("paused", S.paused); el.classList.toggle("stale", stale);
+  $("#livetxt").textContent = liveText();
+}
+setInterval(paintLive, 1000);
+
+// ===== події =====
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-go],[data-target],[data-inc],[data-tab],[data-range],[data-incf],[data-dash],[data-stab],[data-wiz],[data-ack],[data-close],[data-rule],[data-toast],[data-res],[data-sort],[data-modal],#menu,#theme,#copy,#pause,#newuser,#skip,#pwt,#simrun,#simfix,#tgx");
+  if (!el) return;
+  const d = el.dataset;
+  if (d.go) go(d.go);
+  else if (d.target) go("object", { target: d.target, tab: "charts" });
+  else if (d.inc) go("incident", { incident: d.inc });
+  else if (d.tab) { S.tab = d.tab; render(); }
+  else if (d.range) { S.range = d.range; render(); }
+  else if (d.incf) { S.incFilter = d.incf; render(); }
+  else if (d.dash) { S.dashFilter = d.dash; render(); }
+  else if (d.stab) { S.settingsTab = d.stab; render(); }
+  else if (d.wiz) { S.wizStep = +d.wiz; S.wizDone = false; render(); if (S.wizStep === 3) setTimeout(() => { if (S.view === "add" && S.wizStep === 3) { S.wizDone = true; S.empty = false; render(); } }, 3200); }
+  else if (d.ack) { const i = INCIDENTS.find(x => x.id === d.ack); i.status = "ack"; i.ackBy = "Ростислав К."; i.timeline.push({ t: "14:17", c: "ack", text: "Підтвердив Ростислав К." }); render(); toast("Інцидент підтверджено — колеги бачать, що ви займаєтеся"); }
+  else if (d.close) { S.closing = d.close; render(); }
+  else if (d.modal === "cancel") { S.closing = null; render(); $("#closebtn")?.focus(); }
+  else if (d.modal === "confirm") {
+    const text = $("#cm").value.trim();
+    if (!setErr("cm", text ? "" : "Напишіть, чому закриваєте інцидент — це побачать колеги")) { $("#cm").focus(); return; }
+    const i = INCIDENTS.find(x => x.id === S.closing); i.status = "closed"; i.timeline.push({ t: "14:18", c: "ok", text: "Закрито вручну: " + text });
+    S.closing = null; render(); toast("Інцидент закрито");
+  }
+  else if (d.res) openResult(d.res);
+  else if (d.sort) { const [t, k] = d.sort.split(":"), st = S.sort[t]; S.sort[t] = { key: k, dir: st.key === k ? -st.dir : 1 }; render(); $(`[data-sort="${d.sort}"]`)?.focus(); }
+  else if (d.rule) { const r = RULES[+d.rule]; r.on = !r.on; render(); toast(r.on ? "Правило ввімкнено" : "Правило вимкнено"); }
+  else if (d.toast) toast(d.toast);
+  else if (el.id === "menu") { S.menu = !S.menu; render(); }
+  else if (el.id === "pause") { S.paused = !S.paused; if (!S.paused) S.lastUpdate = Date.now(); render(); $("#pause")?.focus(); toast(S.paused ? "Оновлення призупинено" : "Оновлення відновлено"); }
+  else if (el.id === "newuser") go("dashboard", { empty: true });
+  else if (el.id === "simrun") simStart();
+  else if (el.id === "simfix") { SIM.fixing = true; SIM.step = 4; paintSim(); }
+  else if (el.id === "tgx") $("#tg").innerHTML = "";
+  else if (el.id === "skip") $("#main-content").focus();
+  else if (el.id === "pwt") { const pw = $("#pw"), show = pw.type === "password"; pw.type = show ? "text" : "password"; el.setAttribute("aria-pressed", show); el.textContent = show ? "Сховати" : "Показати"; }
+  else if (el.id === "theme") { const r = document.documentElement; r.dataset.theme = r.dataset.theme === "dark" ? "light" : "dark"; }
+  else if (el.id === "copy") {
+    const txt = $("#cmdtxt").textContent;
+    const sel = () => { const rg = document.createRange(); rg.selectNodeContents($("#cmdtxt")); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); toast("Команду виділено — натисніть Ctrl+C"); };
+    try { navigator.clipboard.writeText(txt).then(() => toast("Команду скопійовано"), sel); } catch (err) { sel(); }
+  }
+});
+function setErr(id, msg) {  // 12: помилка під полем, зв'язана через aria-describedby
+  const inp = $("#" + id), err = $("#" + id + "-err");
+  inp.setAttribute("aria-invalid", msg ? "true" : "false"); err.textContent = msg || ""; err.hidden = !msg;
+  return !msg;
+}
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  if (e.target.id === "login") {
+    const ok = [setErr("em", /^\S+@\S+\.\S+$/.test($("#em").value.trim()) ? "" : "Введіть email у форматі name@example.ua"),
+                setErr("pw", $("#pw").value ? "" : "Введіть пароль")];
+    if (ok.every(Boolean)) go("dashboard"); else $("[aria-invalid=true]").focus();
+  }
+  if (e.target.id === "wiz1") {
+    const name = $("#srv").value.trim(), ping = $("#ping").value.trim();
+    const ok = [setErr("srv", name ? "" : "Вкажіть назву сервера — так він називатиметься на дашборді"),
+                setErr("ping", !ping || /^(\d{1,3}\.){3}\d{1,3}$|^[a-z0-9.-]+\.[a-z]{2,}$/i.test(ping) ? "" : "Вкажіть IP-адресу (наприклад, 20.51.12.11) або доменне ім’я")];
+    if (!ok.every(Boolean)) { $("[aria-invalid=true]").focus(); return; }
+    S.wizName = name; S.wizOs = $("#os").value; S.wizStep = 2; render();
+  }
+});
+// 15: пошук показує список — нікуди не перекидає, доки користувач не вибере результат
+function searchResults(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const t = TARGETS.filter(x => (x.name + " " + x.kind).toLowerCase().includes(q)).map(x => ({ key: "t:" + x.id, name: x.name, sub: x.kind }));
+  const i = INCIDENTS.filter(x => (x.id + " " + x.target + " " + x.cause).toLowerCase().includes(q)).map(x => ({ key: "i:" + x.id, name: x.id + " · " + x.target, sub: x.cause }));
+  return [...t, ...i].slice(0, 7);
+}
+function paintSearch(res, sel) {
+  const ul = $("#sr"), q = $("#q");
+  if (!res) { ul.hidden = true; q.setAttribute("aria-expanded", "false"); q.removeAttribute("aria-activedescendant"); return; }
+  ul.hidden = false; q.setAttribute("aria-expanded", "true");
+  ul.innerHTML = res.length ? res.map((x, k) => `<li role="option" id="sr-${k}" data-res="${x.key}" aria-selected="${k === sel}"><span>${esc(x.name)}</span><span class="small muted">${esc(x.sub)}</span></li>`).join("")
+    : `<li role="option" aria-disabled="true" class="muted">Нічого не знайдено</li>`;
+  if (res.length && sel >= 0) q.setAttribute("aria-activedescendant", "sr-" + sel); else q.removeAttribute("aria-activedescendant");
+}
+function openResult(key) { const [k, id] = key.split(":"); k === "t" ? go("object", { target: id, tab: "charts" }) : go("incident", { incident: id }); }
+document.addEventListener("input", e => {
+  if (e.target.id !== "q") return;
+  const v = e.target.value; paintSearch(v.trim() ? searchResults(v) : null, 0); S.qi = 0;
+});
+document.addEventListener("keydown", e => {
+  if (e.target.id !== "q" || $("#sr").hidden) return;
+  const res = searchResults(e.target.value);
+  if (!res.length) { if (e.key === "Escape") paintSearch(null); return; }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); S.qi = ((S.qi || 0) + (e.key === "ArrowDown" ? 1 : -1) + res.length) % res.length; paintSearch(res, S.qi); }
+  else if (e.key === "Enter" && res[S.qi || 0]) { e.preventDefault(); openResult(res[S.qi || 0].key); }
+  else if (e.key === "Escape") paintSearch(null);
+});
+document.addEventListener("pointerdown", e => { if (!e.target.closest?.(".search-wrap") && $("#sr") && !$("#sr").hidden) paintSearch(null); });
+
+// живе оновлення: нові точки метрик кожні 3 с на дашборді й сторінці об’єкта
+// 1: оновлюються лише числа й графіки на місці — фокус і позиція читання не збиваються
+setInterval(() => {
+  if (S.paused) return;
+  const r = seeded(Date.now() % 100000);
+  TARGETS.forEach(t => { if (!t.m) return; for (const k in t.m) { const a = t.m[k]; const v = last(a) + (r() - .5) * (k === "disk" ? .3 : 4); a.push(Math.max(0, Math.min(100, v))); a.shift(); } });
+  NETDATA.push(Math.max(0, last(NETDATA) + (r() - .5) * 8)); NETDATA.shift();
+  S.lastUpdate = Date.now();
+  if (S.loading) return;
+  document.querySelectorAll("[data-v]").forEach(el => { const [id, k] = el.dataset.v.split(":"); el.textContent = fmt(last(targetById(id).m[k])) + "%"; });
+  document.querySelectorAll("[data-sp]").forEach(el => { const t = targetById(el.dataset.sp); el.innerHTML = spark(t.m.cpu, t.status); });
+  document.querySelectorAll("[data-now]").forEach(el => { const c = CHARTS[el.dataset.now]; if (c) el.textContent = fmt(last(c.data)) + " " + c.unit; });
+  document.querySelectorAll("[data-chwrap]").forEach(w => {
+    if (w.contains(document.activeElement) || w.matches(":hover")) return;
+    const id = w.dataset.chwrap; if (id.startsWith("inc:")) return;
+    const card = w.closest(".chart-card"), title = card.querySelector("h2, h3").textContent;
+    const thr = { cpu: [80, 95], ram: [85, 95], disk: [85, 95], net: [null, null] }[id.split(":")[1]];
+    w.outerHTML = chartBlock(id, CHARTS[id].data, { warn: thr[0], crit: thr[1], unit: CHARTS[id].unit, title, labels: RANGE_LABELS[S.range] });
+  });
+  paintLive();
+}, 3000);
+
+// 8: підказка з точним значенням — мишею та стрілками з клавіатури
+function showTip(box, i) {
+  const c = CHARTS[box.dataset.ch]; if (!c) return;
+  const n = c.data.length; i = Math.max(0, Math.min(n - 1, i)); box.dataset.i = i;
+  const svg = box.querySelector("svg"), rect = svg.getBoundingClientRect(), dm = c.dims, vx = dm.L + i / (n - 1) * dm.iw;
+  const tip = box.querySelector(".tip"); tip.hidden = false;
+  tip.textContent = `${ago(i, n)} · ${fmt(c.data[i])} ${c.unit}`;
+  tip.style.left = (vx / dm.W * rect.width) + "px";
+  const cur = svg.querySelector(".cursor"); cur.setAttribute("x1", vx); cur.setAttribute("x2", vx); cur.setAttribute("visibility", "visible");
+}
+function hideTip(box) { box.querySelector(".tip").hidden = true; box.querySelector(".cursor")?.setAttribute("visibility", "hidden"); }
+function tipAt(e) {
+  const box = e.target.closest?.(".chart-box");
+  if (!box) { if (e.type === "pointerdown") document.querySelectorAll(".chart-box").forEach(hideTip); return; }
+  const c = CHARTS[box.dataset.ch], rect = box.querySelector("svg").getBoundingClientRect(), dm = c.dims;
+  const vx = (e.clientX - rect.left) / rect.width * dm.W;
+  showTip(box, Math.round((vx - dm.L) / dm.iw * (c.data.length - 1)));
+}
+document.addEventListener("pointermove", tipAt);
+document.addEventListener("pointerdown", tipAt);  // дотик показує значення й лишає підказку до наступного дотику
+document.addEventListener("pointerout", e => {
+  if (e.pointerType === "touch") return;
+  const box = e.target.closest?.(".chart-box"); if (box && !box.contains(e.relatedTarget)) hideTip(box);
+});
+let wasNarrow = innerWidth < 600;
+addEventListener("resize", () => { clearTimeout(tipAt.h); tipAt.h = setTimeout(() => { if ((innerWidth < 600) !== wasNarrow) { wasNarrow = !wasNarrow; render(); } }, 200); });
+document.addEventListener("focusin", e => { if (e.target.matches?.(".chart-box")) showTip(e.target, CHARTS[e.target.dataset.ch].data.length - 1); });
+document.addEventListener("focusout", e => { if (e.target.matches?.(".chart-box")) hideTip(e.target); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && S.closing) { S.closing = null; render(); $("#closebtn")?.focus(); return; }
+  const box = document.activeElement; if (!box?.matches(".chart-box")) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); showTip(box, +box.dataset.i + (e.key === "ArrowLeft" ? -1 : 1)); }
+});
+
+// ===== симулятор збою =====
+// Етапи збігаються з життєвим циклом інциденту із записки: відхилення → інцидент → ескалація → відновлення → закриття
+const SIM_STEPS = ["Норма", "Виявлено відхилення", "Відкрито інцидент", "Критичний рівень", "Відновлення", "Інцидент закрито"];
+const SIM = { step: 0, tick: 0, v: 0, timer: null, fixing: false, above: 0, below: 0 };
+const SIM_ID = "INC-143";
+// 1 крок симуляції = 1 хв умовного часу, щоб «порушення тримається 2 хв» читалося правдоподібно
+const simClock = () => new Date(NOW.getTime() + (4 + SIM.tick) * 60000).toTimeString().slice(0, 5);
+
+function paintSim() {
+  $("#simsteps").innerHTML = SIM_STEPS.map((x, k) => `<li class="${k < SIM.step ? "done" : k === SIM.step ? "now" : ""}"${k === SIM.step ? ' aria-current="step"' : ""}>${x}</li>`).join("");
+  $("#simv").textContent = fmt(SIM.v || last(targetById("api-02").m.ram)) + " %";
+  $("#simrun").disabled = !!SIM.timer;
+  $("#simrun").textContent = SIM.step === 5 ? "Запустити знову" : "Запустити збій";
+  $("#simfix").disabled = !(SIM.step === 2 || SIM.step === 3) || SIM.fixing;
+}
+// перемальовує екран, повертаючи фокус на той самий елемент; поки відкрито діалог — не чіпає, щоб не стерти коментар
+function simRender() {
+  if (S.closing || S.view === "login") return;
+  const a = document.activeElement, key = a && $("#root").contains(a) ? (a.id ? "#" + a.id : Object.entries(a.dataset)[0]) : null;
+  render();
+  if (key) (typeof key === "string" ? $(key) : $(`[data-${key[0]}="${key[1]}"]`))?.focus({ preventScroll: true });
+}
+function tg(sev, title, text) {  // імітація повідомлення Telegram-бота; role=status озвучує його один раз
+  $("#tg").innerHTML = `<div class="tg-card ${sev}"><div class="tg-head"><span>Telegram · @vigil_bot</span>
+    <button class="tg-x" id="tgx" aria-label="Сховати сповіщення"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button></div>
+    <b>${esc(title)}</b><p>${esc(text)}</p><div><button class="btn ghost" data-inc="${SIM_ID}">Відкрити інцидент</button></div></div>`;
+  clearTimeout(tg.h);
+  const hide = () => { const w = $("#tg"); if (w.matches(":hover") || w.contains(document.activeElement)) tg.h = setTimeout(hide, 3000); else w.innerHTML = ""; };
+  tg.h = setTimeout(hide, 9000);
+}
+function simStart() {
+  const k = INCIDENTS.findIndex(x => x.id === SIM_ID), t = targetById("api-02");
+  if (k >= 0) INCIDENTS.splice(k, 1);
+  t.status = "ok";
+  Object.assign(SIM, { step: 0, tick: 0, v: last(t.m.ram), fixing: false, above: 0, below: 0 });
+  clearInterval(SIM.timer); SIM.timer = setInterval(simTick, 1200);
+  if (k >= 0) simRender();
+  paintSim();
+}
+function simTick() {
+  SIM.tick++;
+  const t = targetById("api-02"), inc = INCIDENTS.find(x => x.id === SIM_ID), now = simClock();
+  SIM.v = Math.max(0, Math.min(99.5, SIM.v + ((SIM.fixing ? 48 : 98) - SIM.v) * .22 + (Math.random() - .5)));
+  t.m.ram.push(SIM.v);
+  if (inc && inc.status !== "closed") { inc.value = fmt(SIM.v) + " %"; inc.age = (SIM.tick - SIM.openTick) + " хв"; }
+  let changed = false;
+  if (!SIM.fixing) {
+    if (SIM.step === 0 && SIM.v > 85) { SIM.step = 1; SIM.devAt = now; SIM.devV = SIM.v; }
+    else if (SIM.step === 1 && SIM.v > 85 && ++SIM.above >= 2) {
+      SIM.step = 2; SIM.openTick = SIM.tick; t.status = "warn"; changed = true;
+      INCIDENTS.unshift({ id: SIM_ID, sev: "warn", status: "open", target: "api-02", metric: "Використання RAM", value: fmt(SIM.v) + " %", threshold: "85 %",
+        started: now, age: "0 хв", cause: "Нестача оперативної пам’яті",
+        rec: "Пам’ять api-02 зростає вже кілька хвилин, а swap заповнюється. Знайдіть процес із найбільшим споживанням RAM (top, сортування за %MEM) — найчастіше це витік пам’яті після релізу. Перезапустіть сервіс або додайте серверу пам’яті.",
+        evidence: [{ ok: true, text: "RAM api-02, середнє за 2 хв", val: fmt(SIM.v) + " % > 85 %" }, { ok: true, text: "Swap api-02", val: "62 % > 50 %" }],
+        alt: [{ name: "Контейнер убито через нестачу пам’яті", score: "1 з 2 умов" }],
+        timeline: [
+          { t: SIM.devAt, c: "", text: "Виявлено відхилення: RAM " + fmt(SIM.devV) + " %" },
+          { t: now, c: "crit", text: "Інцидент відкрито — порушення тримається 2 хв" },
+          { t: now, c: "acc", text: "Визначено ймовірну причину: правило «Нестача оперативної пам’яті»" },
+          { t: now, c: "acc", text: "Сповіщення надіслано в Telegram" }] });
+      tg("warn", "Попередження · api-02", `Використання RAM ${fmt(SIM.v)} % (поріг 85 %). Ймовірна причина: нестача оперативної пам’яті.`);
+    }
+    else if (SIM.step === 2 && SIM.v > 95) {
+      SIM.step = 3; t.status = "crit"; changed = true;
+      if (inc.status !== "closed") {
+        inc.sev = "crit"; inc.threshold = "95 %";
+        inc.timeline.push({ t: now, c: "crit", text: "Рівень підвищено до критичного: RAM " + fmt(SIM.v) + " %" }, { t: now, c: "acc", text: "Сповіщення надіслано в Telegram" });
+        tg("crit", "Критично · api-02", `RAM ${fmt(SIM.v)} % (поріг 95 %). Рівень інциденту ${SIM_ID} підвищено.`);
+      }
+    }
+  } else if (SIM.v < 85 && ++SIM.below >= 2) {
+    SIM.step = 5; t.status = "ok"; changed = true;
+    clearInterval(SIM.timer); SIM.timer = null;
+    if (inc.status !== "closed") {  // якщо вже закрили вручну — друге повідомлення не потрібне
+      inc.status = "closed"; inc.ended = now;
+      inc.timeline.push({ t: now, c: "ok", text: "RAM у нормі 2 хв поспіль — інцидент закрито автоматично" });
+      tg("ok", "Вирішено · api-02", `RAM повернулася до ${fmt(SIM.v)} %. Інцидент ${SIM_ID} закрито автоматично.`);
+    }
+  }
+  if (changed) simRender();
+  paintSim();
+}
+
+// 3: якщо фокус потрапив під картку Telegram чи відкриту панель симулятора — прибираємо їх з дороги
+document.addEventListener("focusin", e => {
+  const a = e.target.getBoundingClientRect(), under = el => { const b = el.getBoundingClientRect(); return a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right; };
+  const sim = $("#sim"), tgw = $("#tg");
+  if (sim.open && !sim.contains(e.target) && under(sim)) sim.open = false;
+  if (tgw.firstChild && !tgw.contains(e.target) && under(tgw)) tgw.innerHTML = "";
+});
+
+// тема за замовчуванням — світла (рішення для прототипу); посилання з #екраном відкриває його одразу
+document.documentElement.dataset.theme = "light";
+const start = fromToken((location.hash || "").slice(1));
+if (start) Object.assign(S, start);
+// popstate спрацьовує і на «Назад/Вперед», і на ручну зміну # в адресі
+window.addEventListener("popstate", () => { const t = fromToken(location.hash.slice(1)); if (t && t.view !== "login") go(t.view, { ...t, closing: null }, true); });
+render();
+paintSim();
+</script>
