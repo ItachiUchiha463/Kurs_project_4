@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     telegram_bot_username: str = ""
     quota_targets: int = 20
     quota_min_interval_s: int = 15
+    ingest_min_interval_s: float = 5  # не частіше за один запит /ingest від агента (ТЗ 2.4)
 
 
 settings = Settings()

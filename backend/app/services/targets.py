@@ -1,0 +1,69 @@
+from datetime import datetime
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.errors import NotFound, QuotaExceeded
+from app.models import Target, User
+from app.repositories import metrics as metrics_repo
+from app.repositories import targets as repo
+from app.schemas.targets import Point, TargetCreate, TargetCreated, TargetOut
+from app.security import hash_token, new_agent_token
+
+
+def _out(target: Target, latest: dict[str, float] | None = None) -> TargetOut:
+    out = TargetOut.model_validate(target)
+    out.latest = latest or {}
+    return out
+
+
+async def list_targets(db: AsyncSession, user: User) -> list[TargetOut]:
+    targets = await repo.list_all(db, user.id)
+    latest = await metrics_repo.latest(db, [t.id for t in targets])
+    return [_out(t, latest.get(t.id)) for t in targets]
+
+
+async def get_or_404(db: AsyncSession, user: User, target_id: int) -> Target:
+    target = await repo.get(db, user.id, target_id)
+    if not target:
+        raise NotFound("Об'єкт не знайдено")
+    return target
+
+
+async def get_target(db: AsyncSession, user: User, target_id: int) -> TargetOut:
+    target = await get_or_404(db, user, target_id)
+    latest = await metrics_repo.latest(db, [target.id])
+    return _out(target, latest.get(target.id))
+
+
+async def create_target(db: AsyncSession, user: User, data: TargetCreate) -> TargetCreated:
+    if await repo.count(db, user.id) >= settings.quota_targets:
+        raise QuotaExceeded(f"Ліміт об'єктів: {settings.quota_targets}", details=[{"limit": settings.quota_targets}])
+    token = new_agent_token() if data.type == "server" else None
+    target = repo.add(
+        db, user.id, name=data.name, type=data.type, address=data.address, interval_s=data.interval_s,
+        expected_status=data.expected_status, check_type="agent" if data.type == "server" else "http",
+        agent_token_hash=hash_token(token) if token else None)
+    await db.flush()
+    return TargetCreated(**_out(target).model_dump(), agent_token=token)
+
+
+async def rotate_token(db: AsyncSession, user: User, target_id: int) -> str:
+    target = await get_or_404(db, user, target_id)
+    if target.type != "server":
+        raise NotFound("Токен є лише в серверів")
+    token = new_agent_token()
+    target.agent_token_hash = hash_token(token)
+    return token
+
+
+async def delete_target(db: AsyncSession, user: User, target_id: int) -> None:
+    if not await repo.remove(db, user.id, target_id):
+        raise NotFound("Об'єкт не знайдено")
+
+
+async def metric_series(db: AsyncSession, user: User, target_id: int, name: str, instance: str,
+                        start: datetime, end: datetime) -> list[Point]:
+    target = await get_or_404(db, user, target_id)
+    rows = await metrics_repo.series(db, target.id, name, instance, start, end)
+    return [Point(ts=ts, value=v) for ts, v in rows]
