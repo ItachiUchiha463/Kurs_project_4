@@ -6,7 +6,8 @@ from app.errors import Conflict, NotFound
 from app.models import Incident, User
 from app.repositories import incidents as repo
 from app.schemas.incidents import DiagnosisOut, EventOut, IncidentDetail, IncidentOut
-from app.services import pipeline
+from app.realtime.hub import publish_after_commit
+from app.services import events, pipeline
 from app.services.diagnosis import NO_CAUSE, NO_CAUSE_HINT
 
 
@@ -51,6 +52,7 @@ async def acknowledge(db: AsyncSession, user: User, incident_id: int) -> Inciden
         raise Conflict("Підтвердити можна лише відкритий інцидент", code="invalid_state")
     inc.status, inc.acknowledged_at = "acknowledged", datetime.now(timezone.utc)
     repo.add_event(db, inc.id, "acknowledged", user_id=user.id)
+    publish_after_commit(db, user.id, events.incident_event(inc, name, "acknowledged"))
     return _out(inc, name)
 
 
@@ -61,4 +63,5 @@ async def resolve(db: AsyncSession, user: User, incident_id: int, comment: str) 
     inc.status, inc.resolved_at, inc.resolve_comment = "resolved", datetime.now(timezone.utc), comment.strip()
     repo.add_event(db, inc.id, "resolved", user_id=user.id, note=f"Закрито вручну: {inc.resolve_comment}")
     pipeline.forget(inc.target_id, inc.metric, inc.instance)
+    publish_after_commit(db, user.id, events.incident_event(inc, name, "resolved"))
     return _out(inc, name)

@@ -11,7 +11,8 @@ from app.engine.thresholds import Deescalate, Escalate, Open, Resolve, State, Th
 from app.models import Incident, Target
 from app.repositories import incidents as repo
 from app.notify import outbox
-from app.services import diagnosis
+from app.realtime.hub import publish_after_commit
+from app.services import diagnosis, events
 
 log = logging.getLogger("vigil.pipeline")
 
@@ -126,4 +127,9 @@ async def process(db: AsyncSession, target: Target, points: list[Point]) -> list
         log.info("інцидент %s", c.kind, extra={"incident_id": c.incident.id, "target_id": target.id,
                                               "metric": c.incident.metric, "severity": c.incident.severity})
     await outbox.enqueue(db, changes)
+    if latest:
+        publish_after_commit(db, target.owner_id, events.metrics_event(
+            target, {k: (p.ts, p.value) for k, p in latest.items()}))
+    for c in changes:
+        publish_after_commit(db, target.owner_id, events.incident_event(c.incident, target.name, c.kind))
     return changes
