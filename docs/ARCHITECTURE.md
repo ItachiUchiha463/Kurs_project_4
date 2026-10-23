@@ -191,7 +191,7 @@ users 1───* targets 1───* metrics            (гіпертаблиц
 | type | text CHECK (`server`,`service`,`container`,`database`) | |
 | check_type | text CHECK (`agent`,`http`,`tcp`,`ping`,`prometheus`,`docker`,`postgres`,`mysql`,`redis`,`mongo`) | |
 | source | text CHECK (`manual`,`discovered`) | контейнери й БД агент знаходить сам |
-| host_id | bigint FK targets, null | на якому сервері працює; основа правил `[host]`, `[siblings]` |
+| host_id | bigint FK targets ON DELETE SET NULL, null | видалення сервера не знищує сервіси; на якому сервері працює; основа правил `[host]`, `[siblings]` |
 | external_id | text, null | ID контейнера / ключ БД з агента |
 | address, port | text, int, null | для http/tcp/ping |
 | expected_status | text, default `200-399` | для http |

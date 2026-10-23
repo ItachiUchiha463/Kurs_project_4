@@ -47,6 +47,11 @@ async def _clean(_database):
     ingest._last_ingest.clear()
     from app.services import pipeline
     pipeline._states.clear()
+    from app.api import auth as auth_api
+    from app.services import auth as auth_service
+    for limiter in (auth_api.register_limiter, auth_api.login_limiter, auth_service.login_failures):
+        limiter.reset()
+    ingest._series_seen.clear()
     yield
 
 

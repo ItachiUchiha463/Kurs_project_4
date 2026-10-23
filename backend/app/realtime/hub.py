@@ -3,13 +3,17 @@
 Події публікуються лише після коміту транзакції, інакше клієнт міг би побачити інцидент, якого потім не існує.
 """
 import asyncio
+import contextlib
 import logging
 
 from fastapi import WebSocket
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from app.tasks import spawn
+
 log = logging.getLogger("vigil.realtime")
+SEND_TIMEOUT_S = 2
 
 
 class Hub:
@@ -25,11 +29,15 @@ class Hub:
             self.rooms.pop(user_id, None)
 
     async def publish(self, user_id: int, message: dict) -> None:
-        for ws in list(self.rooms.get(user_id, ())):
+        async def send(ws: WebSocket) -> None:
             try:
-                await ws.send_json(message)
-            except Exception:  # клієнт зник: прибираємо, решті надсилаємо далі
+                await asyncio.wait_for(ws.send_json(message), SEND_TIMEOUT_S)
+            except Exception:  # клієнт зник або завис: прибираємо, решті події йдуть незалежно
                 self.leave(user_id, ws)
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(ws.close(), SEND_TIMEOUT_S)
+
+        await asyncio.gather(*(send(ws) for ws in list(self.rooms.get(user_id, ()))))
 
 
 hub = Hub()
@@ -44,7 +52,7 @@ def publish_after_commit(db, user_id: int, message: dict) -> None:
 def _flush_events(session: Session) -> None:
     events = session.info.pop("events", None)
     if events:
-        asyncio.get_running_loop().create_task(_send_all(events))
+        spawn(_send_all(events))
 
 
 @event.listens_for(Session, "after_rollback")

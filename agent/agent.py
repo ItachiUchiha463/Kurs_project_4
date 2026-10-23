@@ -12,6 +12,7 @@ import httpx
 from collectors.system import SystemCollector
 
 VERSION = "0.1.0"
+MAX_RECORDS = 500  # ліміт сервісу на один запит
 MAX_BUFFERED = 100  # пакетів, що чекають, поки відновиться зв'язок
 UNAUTHORIZED_PAUSE_S = 300  # невірний токен: не засипаємо сервер запитами
 
@@ -25,32 +26,40 @@ def now_iso() -> str:
 class Sender:
     """Буфер пакетів: невдалий пакет лишається в черзі й іде першим, коли зв'язок повернеться."""
 
-    def __init__(self, client: httpx.Client, server: str, token: str):
+    def __init__(self, client: httpx.Client, server: str, token: str, interval: int = 15):
         self.client, self.url = client, server.rstrip("/") + "/api/ingest"
-        self.headers = {"Authorization": f"Bearer {token}", "X-Agent-Version": VERSION}
+        self.headers = {"Authorization": f"Bearer {token}", "X-Agent-Version": VERSION, "X-Agent-Interval": str(interval)}
         self.queue: deque[list[dict]] = deque(maxlen=MAX_BUFFERED)
 
+    def _next_request(self) -> tuple[int, list[dict]]:
+        """Склеює пакети з голови черги в один запит (до MAX_RECORDS записів): сервер пропускає один запит на 5 с."""
+        count, records = 0, []
+        for batch in self.queue:
+            if records and len(records) + len(batch) > MAX_RECORDS:
+                break
+            records += batch
+            count += 1
+        return count, records
+
     def send(self, batch: list[dict]) -> int | None:
-        """Повертає HTTP-код останньої відповіді, None – якщо зв'язку немає. 401 зупиняє надсилання."""
+        """Один запит за цикл. Повертає HTTP-код відповіді, None – якщо зв'язку немає. 401 зупиняє надсилання."""
         self.queue.append(batch)
-        status = 200
-        while self.queue:
-            try:
-                r = self.client.post(self.url, json=self.queue[0], headers={**self.headers, "X-Agent-Time": now_iso()})
-            except httpx.HTTPError as e:
-                log.warning("немає зв'язку з сервісом: %s (у черзі %d)", e, len(self.queue))
-                return None
-            status = r.status_code
-            if status == 401:
-                log.error("сервіс відхилив токен (401): перевірте token в agent.toml")
-                return status
-            if status == 429 or status >= 500:
-                log.warning("сервіс відповів %s, повторимо наступного циклу", status)
-                return status
-            if status >= 400:  # пакет некоректний: повторювати марно
-                log.error("пакет відхилено (%s): %s", status, r.text[:200])
-            self.queue.popleft()
-        return status
+        count, records = self._next_request()
+        try:
+            r = self.client.post(self.url, json=records, headers={**self.headers, "X-Agent-Time": now_iso()})
+        except httpx.HTTPError as e:
+            log.warning("немає зв'язку з сервісом: %s (у черзі %d)", e, len(self.queue))
+            return None
+        if r.status_code == 401:
+            log.error("сервіс відхилив токен (401): перевірте token в agent.toml")
+        elif r.status_code == 429 or r.status_code >= 500:
+            log.warning("сервіс відповів %s, повторимо наступного циклу", r.status_code)
+        else:
+            if r.status_code >= 400:  # пакет некоректний: повторювати марно
+                log.error("пакет відхилено (%s): %s", r.status_code, r.text[:200])
+            for _ in range(count):
+                self.queue.popleft()
+        return r.status_code
 
 
 def make_batch(host: str, samples: list[tuple[str, str, float]]) -> list[dict]:
@@ -76,7 +85,7 @@ def main() -> None:
     interval = max(int(cfg.get("interval", 15)), 15)
     collector = SystemCollector(cfg.get("disks"))
     with httpx.Client(timeout=10) as client:
-        sender = Sender(client, cfg["server"], cfg["token"])
+        sender = Sender(client, cfg["server"], cfg["token"], interval)
         log.info("агент %s запущено, інтервал %d с", VERSION, interval)
         while True:
             time.sleep(interval)

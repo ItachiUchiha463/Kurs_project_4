@@ -38,6 +38,10 @@ class Unprocessable(AppError):
     status, code = 422, "validation_error"
 
 
+class TooManyRequests(AppError):
+    status, code = 429, "rate_limited"
+
+
 class Forbidden(AppError):
     status, code = 403, "forbidden"
 

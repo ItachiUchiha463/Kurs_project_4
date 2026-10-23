@@ -33,13 +33,14 @@ def test_batch_has_host_and_timestamp():
     assert b[0]["host"] == "web-01" and b[0]["timestamp"] and b[0]["metric"] == "cpu_usage"
 
 
-def test_buffer_is_flushed_in_order_when_connection_returns():
+def test_buffer_is_flushed_in_order_in_one_request_when_connection_returns():
+    import json
     online, got = [False], []
 
     def handler(req: httpx.Request):
         if not online[0]:
             raise httpx.ConnectError("offline")
-        got.append(req.read())
+        got.append(json.loads(req.read()))
         return httpx.Response(200, json={"accepted": 1, "rejected": []})
 
     s = _sender(handler)
@@ -47,7 +48,34 @@ def test_buffer_is_flushed_in_order_when_connection_returns():
     assert len(s.queue) == 2
     online[0] = True
     assert s.send([{"n": 3}]) == 200
-    assert [b"1" in x and 1 or b"2" in x and 2 or 3 for x in got] == [1, 2, 3] and not s.queue
+    assert got == [[{"n": 1}, {"n": 2}, {"n": 3}]] and not s.queue
+
+
+def test_backlog_is_sent_in_chunks_of_at_most_500_records():
+    import json
+    online, sizes = [False], []
+
+    def handler(req: httpx.Request):
+        if not online[0]:
+            raise httpx.ConnectError("offline")
+        sizes.append(len(json.loads(req.read())))
+        return httpx.Response(200, json={})
+
+    s = _sender(handler)
+    for _ in range(60):
+        s.send([{"n": 0}] * 20)  # 1200 записів у буфері
+    online[0] = True
+    while s.queue:
+        s.send([{"n": 0}] * 20)
+    assert max(sizes) <= 500 and len(sizes) > 2
+
+
+def test_interval_header_is_sent():
+    seen = []
+    s = Sender(httpx.Client(transport=httpx.MockTransport(lambda r: seen.append(r.headers) or httpx.Response(200, json={}))),
+               "https://x.test", "vgl_t", 60)
+    s.send([{"n": 1}])
+    assert seen[0]["x-agent-interval"] == "60"
 
 
 def test_buffer_is_capped():

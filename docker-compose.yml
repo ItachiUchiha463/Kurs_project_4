@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vigil}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vigil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD у .env}
       POSTGRES_DB: ${POSTGRES_DB:-vigil}
     volumes:
       - dbdata:/var/lib/postgresql/data
@@ -22,12 +22,17 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vigil}:${POSTGRES_PASSWORD:-vigil}@db:5432/${POSTGRES_DB:-vigil}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vigil}:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD у .env}@db:5432/${POSTGRES_DB:-vigil}
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 10s
+      start_period: 30s
+      retries: 5
 
   frontend:
     build: ./frontend
@@ -36,7 +41,8 @@ services:
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
-    env_file: .env
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}  # решта .env (секрети бекенда) Caddy не потрібна
     ports:
       - "80:80"    # редирект на HTTPS і перевірка Let's Encrypt
       - "443:443"
@@ -44,8 +50,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data  # сертифікати: без цього кожен перезапуск випрошував би новий
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
 
 volumes:
   dbdata:

@@ -33,6 +33,8 @@ describe('схеми форм повторюють правила бекенда
     const ok = { full_name: 'Ада', email: 'a@example.ua', password: 'Passw0rd1', repeat: 'Passw0rd1' }
     expect(registerSchema.safeParse(ok).success).toBe(true)
     expect(registerSchema.safeParse({ ...ok, password: 'short1', repeat: 'short1' }).success).toBe(false)
+    const long = 'Привіт'.repeat(10) + '1'
+    expect(registerSchema.safeParse({ ...ok, password: long, repeat: long }).success).toBe(false)
     expect(registerSchema.safeParse({ ...ok, password: 'onlyletters', repeat: 'onlyletters' }).success).toBe(false)
     expect(registerSchema.safeParse({ ...ok, password: '12345678', repeat: '12345678' }).success).toBe(false)
     const mismatch = registerSchema.safeParse({ ...ok, repeat: 'Other0000' })

@@ -7,6 +7,7 @@ const password = z
   .min(8, 'Щонайменше 8 символів')
   .regex(/[A-Za-zА-Яа-яІіЇїЄєҐґ]/, 'Потрібна хоча б одна літера')
   .regex(/\d/, 'Потрібна хоча б одна цифра')
+  .refine((v) => new TextEncoder().encode(v).length <= 72, 'Пароль задовгий (не більше 72 байтів; кирилична літера – 2 байти)')
 
 export const loginSchema = z.object({ email, password: z.string().min(1, 'Введіть пароль') })
 

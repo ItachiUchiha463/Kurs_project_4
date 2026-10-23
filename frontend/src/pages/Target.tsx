@@ -111,7 +111,7 @@ export function TargetPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Видалити «{target.name}»?</DialogTitle>
-            <DialogDescription>Разом з об’єктом видаляться його метрики та інциденти. Це не можна скасувати.</DialogDescription>
+            <DialogDescription>{target.type === 'server' ? 'Разом із сервером видаляться його метрики та інциденти; пов’язані сервіси залишаться, але втратять прив’язку. ' : 'Разом з об’єктом видаляться його метрики та інциденти. '}Це не можна скасувати.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>Скасувати</Button>

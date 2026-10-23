@@ -15,6 +15,7 @@ from app.models import Target
 from app.notify import outbox, telegram
 from app.notify.commands import handle_update
 from app.services import checks
+from app.tasks import spawn
 
 log = logging.getLogger("vigil.background")
 LOCK_KEY = 7_201_026  # довільне число, спільне для всіх екземплярів Vigil на одній БД
@@ -28,6 +29,11 @@ _next_run: dict[int, float] = {}
 _running: set[int] = set()
 _global = asyncio.Semaphore(GLOBAL_LIMIT)
 _per_owner: dict[int, asyncio.Semaphore] = defaultdict(lambda: asyncio.Semaphore(OWNER_LIMIT))
+
+
+def forget_target(target_id: int) -> None:
+    _next_run.pop(target_id, None)
+    _running.discard(target_id)
 
 
 async def _check_one(target_id: int, owner_id: int, checker) -> None:
@@ -56,7 +62,7 @@ async def schedule_due(checker=None, now: float | None = None) -> int:
             continue
         _next_run[tid] = now + interval
         _running.add(tid)
-        asyncio.create_task(_check_one(tid, owner, checker))
+        spawn(_check_one(tid, owner, checker))
         launched += 1
     return launched
 

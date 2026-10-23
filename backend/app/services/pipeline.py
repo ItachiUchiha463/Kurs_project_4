@@ -57,9 +57,19 @@ async def _state(db: AsyncSession, key: Key) -> State:
     return _states[key]
 
 
-def forget(target_id: int, metric: str, instance: str) -> None:
-    """Викликається після ручного закриття: оцінювач починає ряд з чистого стану."""
-    _states.pop((target_id, metric, instance), None)
+def keep_silent(incident: Incident) -> None:
+    """Після ручного закриття оцінювач і далі вважає інцидент відкритим, але нового не створює.
+
+    Поки значення погане, нічого не відбувається; коли воно нормалізується, стан скидається, і наступне порушення
+    відкриє вже новий інцидент. Без цього ручне закриття за ще поганого значення одразу відкривало б дубль.
+    shortcut: стан у пам'яті; після перезапуску процесу порушення, що триває, відкриє інцидент знову.
+    """
+    _states[(incident.target_id, incident.metric, incident.instance)] = State(incident=incident.severity)
+
+
+def forget_target(target_id: int) -> None:
+    for key in [k for k in _states if k[0] == target_id]:
+        del _states[key]
 
 
 async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) -> Change | None:

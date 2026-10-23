@@ -37,7 +37,10 @@ async def check_agents(db: AsyncSession, now: datetime | None = None) -> int:
         Target.type == "server", Target.enabled, Target.agent_token_hash.is_not(None), Target.last_seen.is_not(None)))
     dead = 0
     for t in servers:
-        if now - t.last_seen > timedelta(seconds=AGENT_DEAD_AFTER_INTERVALS * t.interval_s):
+        if now - t.last_seen > timedelta(seconds=AGENT_DEAD_AFTER_INTERVALS * t.effective_interval_s):
+            state = pipeline._states.get((t.id, "agent_alive", ""))
+            if state and state.incident:  # інцидент уже відкритий: не пишемо той самий 0 щоп'ятнадцять секунд
+                continue
             dead += 1
             await _store(db, t, [pipeline.Point("agent_alive", "", now, 0)])
     return dead

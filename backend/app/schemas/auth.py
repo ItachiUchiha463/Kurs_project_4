@@ -21,6 +21,8 @@ class RegisterIn(BaseModel):
     @field_validator("password")
     @classmethod
     def _password(cls, v: str) -> str:
+        if len(v.encode()) > 72:
+            raise ValueError("Пароль задовгий: не більше 72 байтів (приблизно 36 літер кирилицею)")
         if len(v) < 8 or not re.search(r"[A-Za-zА-Яа-яІіЇїЄєҐґ]", v) or not re.search(r"\d", v):
             raise ValueError("Пароль: щонайменше 8 символів, літера й цифра")
         return v

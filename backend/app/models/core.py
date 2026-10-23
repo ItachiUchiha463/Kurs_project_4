@@ -35,7 +35,8 @@ class Target(Base):
     type: Mapped[str] = mapped_column(Text)
     check_type: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(Text, default="manual", server_default="manual")
-    host_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("targets.id", ondelete="CASCADE"))
+    # SET NULL: видалення сервера не знищує пов'язані сервіси та їхню історію
+    host_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("targets.id", ondelete="SET NULL"))
     external_id: Mapped[str | None] = mapped_column(Text)
     address: Mapped[str | None] = mapped_column(Text)
     expected_status: Mapped[str] = mapped_column(Text, default="200-399", server_default="200-399")
@@ -43,10 +44,17 @@ class Target(Base):
     agent_token_hash: Mapped[str | None] = mapped_column(Text, unique=True)
     agent_version: Mapped[str | None] = mapped_column(Text)
     clock_offset_s: Mapped[float | None] = mapped_column(Float)
+    agent_interval_s: Mapped[int | None] = mapped_column(Integer)  # інтервал із agent.toml: він незалежний від interval_s
     status: Mapped[str] = mapped_column(Text, default="unknown", server_default="unknown")
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def effective_interval_s(self) -> int:
+        """Як часто реально приходять дані: більший з інтервалів об'єкта й агента."""
+        return max(self.interval_s, self.agent_interval_s or 0)
+
     __table_args__ = (
         CheckConstraint("type in ('server','service','container','database')"),
         CheckConstraint("status in ('ok','warning','critical','unavailable','unknown')"),

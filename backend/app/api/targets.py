@@ -54,8 +54,9 @@ async def target_metrics(target_id: int, user: CurrentUser, db: DbDep, name: str
 async def ingest(records: list[IngestRecord], db: DbDep,
                  authorization: Annotated[str | None, Header()] = None,
                  x_agent_time: Annotated[datetime | None, Header()] = None,
-                 x_agent_version: Annotated[str | None, Header()] = None):
+                 x_agent_version: Annotated[str | None, Header()] = None,
+                 x_agent_interval: Annotated[int | None, Header()] = None):
     scheme, _, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise AuthError("Потрібен токен агента")
-    return await ingest_service.ingest(db, token, records, x_agent_time, x_agent_version)
+    return await ingest_service.ingest(db, token, records, x_agent_time, x_agent_version, x_agent_interval)

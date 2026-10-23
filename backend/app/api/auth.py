@@ -1,19 +1,34 @@
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.config import settings
 from app.deps import CurrentUser, DbDep
+from app.errors import TooManyRequests
+from app.ratelimit import SlidingWindow
 from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UserOut
 from app.schemas.auth import ProfileIn, TelegramLinkOut
 from app.services import auth, telegram_link
 
 router = APIRouter(tags=["auth"])
 
+register_limiter = SlidingWindow(settings.rate_register_per_min, 60)
+login_limiter = SlidingWindow(settings.rate_login_per_min, 60)
 
-@router.post("/auth/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+
+def _limit(limiter: SlidingWindow):
+    async def check(request: Request):
+        # за Caddy справжню адресу дає uvicorn --proxy-headers (див. Dockerfile)
+        if not limiter.hit(request.client.host if request.client else "unknown"):
+            raise TooManyRequests("Забагато спроб. Спробуйте за хвилину")
+    return Depends(check)
+
+
+@router.post("/auth/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED,
+             dependencies=[_limit(register_limiter)])
 async def register(data: RegisterIn, db: DbDep):
     return TokenOut(access_token=await auth.register(db, data))
 
 
-@router.post("/auth/login", response_model=TokenOut)
+@router.post("/auth/login", response_model=TokenOut, dependencies=[_limit(login_limiter)])
 async def login(data: LoginIn, db: DbDep):
     return TokenOut(access_token=await auth.login(db, data))
 

@@ -76,6 +76,10 @@ async def rotate_token(db: AsyncSession, user: User, target_id: int) -> str:
 async def delete_target(db: AsyncSession, user: User, target_id: int) -> None:
     if not await repo.remove(db, user.id, target_id):
         raise NotFound("Об'єкт не знайдено")
+    from app import background  # імпорт тут, щоб не тягнути фонові задачі при завантаженні модуля
+    from app.services import ingest, pipeline
+    for forget in (pipeline.forget_target, ingest.forget_target, background.forget_target):
+        forget(target_id)
 
 
 async def metric_series(db: AsyncSession, user: User, target_id: int, name: str, instance: str,
