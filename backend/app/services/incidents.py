@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import Conflict, NotFound
-from app.models import Incident, User
+from app.models import Incident, Target, User
 from app.repositories import incidents as repo
 from app.schemas.incidents import DiagnosisOut, EventOut, IncidentDetail, IncidentOut
 from app.realtime.hub import publish_after_commit
@@ -63,5 +63,6 @@ async def resolve(db: AsyncSession, user: User, incident_id: int, comment: str) 
     inc.status, inc.resolved_at, inc.resolve_comment = "resolved", datetime.now(timezone.utc), comment.strip()
     repo.add_event(db, inc.id, "resolved", user_id=user.id, note=f"Закрито вручну: {inc.resolve_comment}")
     pipeline.keep_silent(inc)
+    await pipeline.refresh_status(db, await db.get(Target, inc.target_id))
     publish_after_commit(db, user.id, events.incident_event(inc, name, "resolved"))
     return _out(inc, name)

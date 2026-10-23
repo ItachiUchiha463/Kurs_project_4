@@ -1,4 +1,5 @@
 """HTTP-перевірка (ТЗ 5.2): GET на перевірений IP, без автоматичних редиректів, тіло відповіді не читається."""
+import asyncio
 import time
 from dataclasses import dataclass
 
@@ -7,6 +8,7 @@ import httpx
 from app.checks import ssrf
 
 TIMEOUT_S = 10
+TOTAL_TIMEOUT_S = 30  # timeout httpx діє на кожен крок окремо: повільний «крапельний» сервер інакше тримав би перевірку вічно
 MAX_REDIRECTS = 3
 REDIRECTS = {301, 302, 303, 307, 308}
 
@@ -29,7 +31,14 @@ def status_ok(code: int, expected: str) -> bool:
 
 
 async def check_http(url: str, expected: str = "200-399", *, resolver=None, transport=None) -> CheckResult:
-    resolver = resolver or ssrf.resolve_public
+    try:
+        async with asyncio.timeout(TOTAL_TIMEOUT_S):
+            return await _check(url, expected, resolver or ssrf.resolve_public, transport)
+    except TimeoutError:
+        return CheckResult(0, error="timeout")
+
+
+async def _check(url: str, expected: str, resolver, transport) -> CheckResult:
     t0 = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport, follow_redirects=False) as client:

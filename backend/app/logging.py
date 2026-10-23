@@ -25,6 +25,7 @@ def setup_logging(level: str) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # на INFO він пише адресу запиту, а в Telegram у ній токен бота
 
 
 class RequestLogMiddleware(BaseHTTPMiddleware):

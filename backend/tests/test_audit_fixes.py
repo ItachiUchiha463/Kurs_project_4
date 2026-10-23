@@ -376,3 +376,38 @@ async def test_known_series_are_reloaded_after_ttl(client, user_factory, monkeyp
         ingest._series_seen[srv["id"]][1].add(("disk_usage", "/gone"))
         ingest._series_seen[srv["id"]] = (ingest._series_seen[srv["id"]][0] - ingest.SERIES_TTL_S - 1, ingest._series_seen[srv["id"]][1])
         assert ("disk_usage", "/gone") not in await ingest._known_series(db, srv["id"])
+
+
+# ---------- аудит 4 ----------
+
+async def test_bot_token_never_reaches_logs(caplog):
+    import httpx
+
+    from app.logging import setup_logging
+    from app.notify.telegram import Bot
+    setup_logging("INFO")
+    caplog.set_level("INFO")
+    t = httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True, "result": []}))
+    await Bot("123:SECRET", httpx.AsyncClient(transport=t)).updates(0)
+    assert "SECRET" not in caplog.text
+
+
+async def test_slow_check_is_cut_off(monkeypatch):
+    from app.checks import http as http_check
+
+    async def hang(host, port):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(http_check, "TOTAL_TIMEOUT_S", 0.2)
+    result = await http_check.check_http("http://example.com/", resolver=hang)
+    assert result.available == 0 and result.error == "timeout"
+
+
+async def test_manual_close_refreshes_target_status(client, user_factory):
+    h = await user_factory()
+    srv = await server(client, h)
+    await push(client, srv["agent_token"], "cpu_usage", 97, ago_s=500)
+    assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "critical"
+    [inc] = await incidents(client, h)
+    await client.post(f"/api/incidents/{inc['id']}/resolve", json={"comment": "лагоджу"}, headers=h)
+    assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "ok"
