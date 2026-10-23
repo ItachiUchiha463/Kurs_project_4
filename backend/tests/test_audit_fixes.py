@@ -308,3 +308,71 @@ async def test_deleting_target_clears_in_memory_state(client, user_factory):
     await client.delete(f"/api/targets/{srv['id']}", headers=h)
     assert not any(k[0] == srv["id"] for k in pipeline._states)
     assert srv["id"] not in ingest._series_seen and srv["id"] not in ingest._last_ingest
+
+
+# ---------- аудит 3 ----------
+
+async def test_password_hashing_does_not_block_event_loop(client):
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    t = asyncio.create_task(ticker())
+    await client.post(REG, json=reg_body(0))  # bcrypt ~0,3 с
+    t.cancel()
+    assert ticks > 5  # у блокуючій версії event loop стояв би увесь час
+
+
+async def test_login_lock_does_not_lock_victim_from_other_ip(client):
+    from app.services import auth as auth_service
+    await client.post(REG, json=reg_body(0))
+    for _ in range(10):
+        auth_service.login_failures.fail("u0@example.com|6.6.6.6")
+    assert auth_service.login_failures.locked("u0@example.com|6.6.6.6")
+    assert (await client.post("/api/auth/login", json={"email": "u0@example.com", "password": "Passw0rd1"})).status_code == 200
+
+
+async def test_service_url_with_credentials_is_rejected(client, user_factory):
+    h = await user_factory()
+    r = await client.post("/api/targets", json={"name": "x", "type": "service", "address": "http://u:p@example.com/"}, headers=h)
+    assert r.status_code == 422
+
+
+async def test_bot_loop_survives_one_bad_update(monkeypatch):
+    from app import background
+
+    handled = []
+
+    class Bot:
+        calls = 0
+
+        async def updates(self, offset):
+            Bot.calls += 1
+            if Bot.calls > 1:
+                raise asyncio.CancelledError
+            return [{"update_id": 1}, {"update_id": 2}]
+
+    async def handle(db, bot, update):
+        handled.append(update["update_id"])
+        if update["update_id"] == 1:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(background.telegram, "get_bot", lambda: Bot())
+    monkeypatch.setattr(background, "handle_update", handle)
+    with pytest.raises(asyncio.CancelledError):
+        await background._bot_loop()
+    assert handled == [1, 2]
+
+
+async def test_known_series_are_reloaded_after_ttl(client, user_factory, monkeypatch):
+    h = await user_factory()
+    srv = await server(client, h)
+    async with SessionLocal() as db:
+        await ingest._known_series(db, srv["id"])
+        ingest._series_seen[srv["id"]][1].add(("disk_usage", "/gone"))
+        ingest._series_seen[srv["id"]] = (ingest._series_seen[srv["id"]][0] - ingest.SERIES_TTL_S - 1, ingest._series_seen[srv["id"]][1])
+        assert ("disk_usage", "/gone") not in await ingest._known_series(db, srv["id"])

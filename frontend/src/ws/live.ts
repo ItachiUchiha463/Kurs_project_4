@@ -2,7 +2,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
-import { getToken } from '@/lib/auth'
+import { clearToken, getToken } from '@/lib/auth'
 import { metricLabel } from '@/lib/metrics'
 import type { Incident, LiveEvent, Point, Target } from '@/lib/types'
 
@@ -71,8 +71,13 @@ export function useLive() {
         } else if (e.type === 'metrics') applyMetrics(qc, e)
         else if (e.type === 'incident') applyIncident(qc, e.change, e.incident)
       }
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (stopped) return
+        if (ev.code === 4401) {  // токен недійсний чи прострочений: повторні спроби марні
+          clearToken()
+          window.location.assign('/login')
+          return
+        }
         setStatus('reconnecting')
         timer = window.setTimeout(connect, delay)
         delay = Math.min(delay * 2, 30_000)

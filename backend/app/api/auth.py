@@ -29,8 +29,8 @@ async def register(data: RegisterIn, db: DbDep):
 
 
 @router.post("/auth/login", response_model=TokenOut, dependencies=[_limit(login_limiter)])
-async def login(data: LoginIn, db: DbDep):
-    return TokenOut(access_token=await auth.login(db, data))
+async def login(data: LoginIn, db: DbDep, request: Request):
+    return TokenOut(access_token=await auth.login(db, data, request.client.host if request.client else ""))
 
 
 @router.get("/me", response_model=UserOut)

@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -17,6 +18,8 @@ class TargetCreate(BaseModel):
         # сервер працює через агента й адреси не потребує; сервіс перевіряється за URL
         if self.type == "service" and not (self.address and self.address.startswith(("http://", "https://"))):
             raise ValueError("Для сервісу вкажіть адресу, що починається з http:// або https://")
+        if self.type == "service" and httpx.URL(self.address).userinfo:
+            raise ValueError("Адреса не повинна містити логін і пароль")
         return self
 
 

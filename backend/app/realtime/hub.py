@@ -4,7 +4,6 @@
 """
 import asyncio
 import contextlib
-import logging
 
 from fastapi import WebSocket
 from sqlalchemy import event
@@ -12,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.tasks import spawn
 
-log = logging.getLogger("vigil.realtime")
 SEND_TIMEOUT_S = 2
 
 

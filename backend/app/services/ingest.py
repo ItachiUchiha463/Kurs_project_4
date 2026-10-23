@@ -20,15 +20,17 @@ MAX_INSTANCE_LEN = 100
 _last_ingest: dict[int, float] = {}  # shortcut: у пам'яті процесу; рівно один процес (ТЗ розд. 3), при масштабуванні – у БД
 
 
-_series_seen: dict[int, set[tuple[str, str]]] = {}  # відомі ряди кожного об'єкта: захист від безмежного росту
+_series_seen: dict[int, tuple[float, set[tuple[str, str]]]] = {}  # (коли завантажено, відомі ряди) кожного об'єкта: захист від безмежного росту
+SERIES_TTL_S = 3600  # раз на годину список перечитується, щоб зниклі ряди (змінні диски) звільняли місце
 
 
 async def _known_series(db: AsyncSession, target_id: int) -> set[tuple[str, str]]:
-    if target_id not in _series_seen:
+    loaded = _series_seen.get(target_id)
+    if loaded is None or time.monotonic() - loaded[0] > SERIES_TTL_S:
         rows = await db.execute(text("SELECT DISTINCT name, instance FROM metrics WHERE target_id = :t AND ts > now() - interval '1 day'"),
                                 {"t": target_id})
-        _series_seen[target_id] = {(n, i) for n, i in rows}
-    return _series_seen[target_id]
+        _series_seen[target_id] = (time.monotonic(), {(n, i) for n, i in rows})
+    return _series_seen[target_id][1]
 
 
 def forget_target(target_id: int) -> None:

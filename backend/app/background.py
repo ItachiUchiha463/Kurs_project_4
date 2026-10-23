@@ -101,9 +101,12 @@ async def _bot_loop() -> None:
         try:
             for update in await bot.updates(offset):
                 offset = update["update_id"] + 1
-                async with SessionLocal() as db:
-                    await handle_update(db, bot, update)
-                    await db.commit()
+                try:
+                    async with SessionLocal() as db:
+                        await handle_update(db, bot, update)
+                        await db.commit()
+                except Exception:  # одне погане повідомлення не повинно губити решту пакета
+                    log.exception("збій обробки повідомлення бота")
             beats["bot"] = time.monotonic()
         except Exception as e:  # мережа, 409 від другого getUpdates тощо – не зупиняємо задачу
             log.warning("збій бота: %s", type(e).__name__)

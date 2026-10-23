@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +15,7 @@ from app.security import create_access_token, hash_password, verify_password
 _BAD_CREDENTIALS = "Невірний email або пароль"
 # Хеш-пустушка, щоб перевірка неіснуючого email займала стільки ж часу, скільки й справжнього.
 _DUMMY_HASH = hash_password("dummy-password-1")
-# N невдалих входів поспіль на один email – блокування (ТЗ розд. 6); діє й для неіснуючих email, тож нічого не розкриває
+# N невдалих входів поспіль з однієї IP на один email – блокування (ТЗ розд. 6); діє й для неіснуючих email, тож нічого не розкриває
 login_failures = FailureLock(settings.login_lock_after, settings.login_lock_s)
 
 
@@ -22,7 +24,7 @@ async def register(db: AsyncSession, data: RegisterIn) -> str:
         raise Forbidden("Реєстрацію закрито", code="registration_closed")
     if await users.count(db) >= settings.global_users:
         raise Forbidden("Сервіс заповнений: реєстрацію тимчасово закрито", code="registration_closed")
-    user = users.add(db, data.email, data.full_name, hash_password(data.password))
+    user = users.add(db, data.email, data.full_name, await asyncio.to_thread(hash_password, data.password))
     try:
         await db.flush()
     except IntegrityError:
@@ -31,12 +33,13 @@ async def register(db: AsyncSession, data: RegisterIn) -> str:
     return create_access_token(user.id, user.token_version)
 
 
-async def login(db: AsyncSession, data: LoginIn) -> str:
-    email = data.email.lower()
+async def login(db: AsyncSession, data: LoginIn, ip: str = "") -> str:
+    email = f"{data.email.lower()}|{ip}"  # ключ з IP: сторонній не заблокує чужий обліковий запис
     if login_failures.locked(email):
         raise TooManyRequests("Забагато невдалих спроб входу. Спробуйте за 15 хвилин")
     user = await users.get_by_email(db, data.email)
-    ok = verify_password(data.password, user.password_hash if user else _DUMMY_HASH)
+    # bcrypt ~0,3 с: у потоці, щоб не зупиняти event loop
+    ok = await asyncio.to_thread(verify_password, data.password, user.password_hash if user else _DUMMY_HASH)
     if not user or not ok:
         login_failures.fail(email)
         raise AuthError(_BAD_CREDENTIALS)
