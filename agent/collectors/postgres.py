@@ -29,11 +29,11 @@ class PostgresCollector:
     def collect(self) -> list[Sample]:
         """Якщо БД не відповідає, надсилається лише db_up = 0 (решта метрик за цей цикл не потрібна)."""
         try:
-            t0 = time.perf_counter()
             conn = self.connect(self.dsn)
         except Exception:  # noqa: BLE001 – будь-яка помилка підключення означає «БД недоступна»
             return [("db_up", "", 0.0)]
         try:
+            t0 = time.perf_counter()  # час самого запиту: підключення (DNS, TLS) до db_response_ms не входить
             conn.execute("SELECT 1")
             out: list[Sample] = [("db_up", "", 1.0), ("db_response_ms", "", (time.perf_counter() - t0) * 1000)]
             max_conn = float(conn.execute("SHOW max_connections").fetchone()[0])
