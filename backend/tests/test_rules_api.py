@@ -114,3 +114,15 @@ async def test_rule_test_checks_object_type_and_ownership(client, user_factory):
     assert (await client.post(f"/api/rules/{rid}/test", params={"target_id": svc["id"]}, headers=a)).status_code == 422  # правило лише для серверів
     assert (await client.post(f"/api/rules/{rid}/test", params={"target_id": srv["id"]}, headers=b)).status_code == 404
     assert (await client.post(f"/api/rules/{rid}/test", params={"target_id": 99999}, headers=a)).status_code == 404
+
+
+async def test_rule_with_concrete_instance_matches_that_series(client, user_factory):
+    h = await user_factory()
+    srv = await server(client, h)
+    await push(client, srv["agent_token"], "disk_usage", 97, instance="/")
+    await push(client, srv["agent_token"], "disk_usage", 10, instance="/data")
+    on = lambda inst: {**RULE, "conditions": [{**RULE["conditions"][0], "instance": inst}]}  # noqa: E731
+    root = (await client.post("/api/rules", json=on("/"), headers=h)).json()["id"]
+    data = (await client.post("/api/rules", json=on("/data"), headers=h)).json()["id"]
+    assert (await client.post(f"/api/rules/{root}/test", params={"target_id": srv["id"]}, headers=h)).json()["matched"] is True
+    assert (await client.post(f"/api/rules/{data}/test", params={"target_id": srv["id"]}, headers=h)).json()["matched"] is False

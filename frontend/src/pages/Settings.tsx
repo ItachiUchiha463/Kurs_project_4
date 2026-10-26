@@ -8,12 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api, ApiError } from '@/lib/api'
-import { metricLabel, metricUnit } from '@/lib/metrics'
+import { AGG_LABEL, metricLabel, metricUnit } from '@/lib/metrics'
 import { useTargets, useThresholds } from '@/lib/queries'
 import type { ThresholdItem } from '@/lib/types'
 import { Rules } from '@/pages/settings/Rules'
 
-const AGG: Record<string, string> = { last: 'останнє значення', avg: 'середнє', max: 'максимум', delta: 'приріст' }
 const SOURCE: Record<ThresholdItem['source'], string> = { default: 'Типовий', template: 'Мій шаблон', target: 'Для об’єкта' }
 const num = (v: string): number | null => (v.trim() === '' ? null : Number(v.replace(',', '.')))
 
@@ -49,7 +48,7 @@ function Row({ item, scope }: { item: ThresholdItem; scope: number | undefined }
   )
   return (
     <TableRow>
-      <TableCell><span className="font-medium">{label}</span><br /><span className="text-xs text-muted-foreground">{AGG[item.agg] ?? item.agg}{item.window_s ? ` за ${Math.round(item.window_s / 60)} хв` : ''}{unit ? `, ${unit}` : ''}</span></TableCell>
+      <TableCell><span className="font-medium">{label}</span><br /><span className="text-xs text-muted-foreground">{AGG_LABEL[item.agg] ?? item.agg}{item.window_s ? ` за ${Math.round(item.window_s / 60)} хв` : ''}{unit ? `, ${unit}` : ''}</span></TableCell>
       <TableCell>{field('попередження', warn, setWarn, !item.levels_editable)}</TableCell>
       <TableCell>{field('критичний', crit, setCrit, !item.levels_editable)}</TableCell>
       <TableCell>{field('тривалість, с', duration, setDuration)}</TableCell>

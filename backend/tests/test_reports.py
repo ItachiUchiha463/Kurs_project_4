@@ -114,3 +114,29 @@ async def test_period_is_validated_and_users_are_isolated(client, user_factory):
     assert (await client.get("/api/reports", params={"from": (t - timedelta(days=40)).isoformat(), "to": t.isoformat()}, headers=a)).status_code == 422
     assert (await client.get("/api/reports", params=params(10), headers=b)).json()["rows"] == []
     assert (await client.get("/api/reports")).status_code == 401
+
+
+async def test_overlapping_availability_incidents_are_counted_once(client, user_factory):
+    h = await user_factory()
+    srv = await aged_server(client, h)
+    owner = await me_id(client, h)
+    t = now()
+    for metric in ("agent_alive", "ping_available"):  # сервер вимкнено: обидва інциденти одночасно
+        await add_incident(owner, srv["id"], metric, "critical", t - timedelta(hours=5), t - timedelta(hours=4), t - timedelta(hours=5))
+    await add_incident(owner, srv["id"], "ping_available", "critical", t - timedelta(hours=4, minutes=30), t - timedelta(hours=3, minutes=30), None)
+    row = (await client.get("/api/reports", params=params(10), headers=h)).json()["rows"][0]
+    assert abs(row["availability_pct"] - 85.0) < 0.1  # від -5 год до -3 год 30 хв = 1,5 год із 10
+
+
+async def test_dates_without_time_zone_are_treated_as_utc(client, user_factory):
+    h = await user_factory()
+    await aged_server(client, h)
+    r = await client.get("/api/reports", params={"from": "2026-10-20T00:00:00", "to": "2026-10-26T00:00:00"}, headers=h)
+    assert r.status_code == 200 and r.json()["start"].startswith("2026-10-20T00:00:00")
+
+
+async def test_csv_names_cannot_be_formulas(client, user_factory):
+    h = await user_factory()
+    await server(client, h, "=HYPERLINK(1)")
+    r = await client.get("/api/reports", params={**params(10), "format": "csv"}, headers=h)
+    assert (chr(10) + "'=HYPERLINK(1);") in r.content.decode("utf-8")

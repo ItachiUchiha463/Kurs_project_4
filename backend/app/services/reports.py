@@ -43,12 +43,24 @@ async def _metric_stats(db: AsyncSession, ids: list[int], names: list[str], star
     return {(t, n): MetricStat(avg=a, max=m) for t, n, a, m in rows}
 
 
-def _overlap_s(inc: Incident, start: datetime, end: datetime, now: datetime) -> float:
-    lo, hi = max(inc.started_at, start), min(inc.resolved_at or now, end)
-    return max((hi - lo).total_seconds(), 0.0)
+def _downtime_s(incidents: list[Incident], start: datetime, end: datetime, now: datetime) -> float:
+    """Сумарний час недоступності: перетини інцидентів об'єднуємо (вимкнений сервер дає agent_alive і ping_available одночасно)."""
+    spans = sorted((max(i.started_at, start), min(i.resolved_at or now, end)) for i in incidents if i.metric in AVAILABILITY_METRICS)
+    total, reached = 0.0, start
+    for lo, hi in spans:
+        lo = max(lo, reached)  # частина, вже врахована попередніми інцидентами, не рахується вдруге
+        if hi > lo:
+            total += (hi - lo).total_seconds()
+            reached = hi
+    return total
+
+
+def _utc(d: datetime) -> datetime:
+    return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d  # дата без часового поясу – це UTC
 
 
 async def build(db: AsyncSession, user: User, start: datetime, end: datetime) -> ReportOut:
+    start, end = _utc(start), _utc(end)
     _check_period(start, end)
     now = datetime.now(timezone.utc)
     targets = list(await db.scalars(select(Target).where(Target.owner_id == user.id, Target.hidden.is_(False)).order_by(Target.id)))
@@ -64,7 +76,7 @@ async def build(db: AsyncSession, user: User, start: datetime, end: datetime) ->
     for t in targets:
         mine = by_target[t.id]
         observed = max((end - max(start, t.created_at)).total_seconds(), 1.0)  # об'єкт, доданий посеред періоду, не «недоступний» до створення
-        down = sum(_overlap_s(i, start, end, now) for i in mine if i.metric in AVAILABILITY_METRICS)
+        down = _downtime_s(mine, start, end, now)
         started = [i for i in mine if start <= i.started_at < end]
         detect = [(i.started_at - i.first_breach_at).total_seconds() for i in started if i.first_breach_at]
         recover = [(i.resolved_at - i.started_at).total_seconds() for i in started if i.resolved_at and i.status == "resolved"]
@@ -82,6 +94,11 @@ async def build(db: AsyncSession, user: User, start: datetime, end: datetime) ->
                      incidents=sum(r.incidents for r in rows), critical=sum(r.critical for r in rows))
 
 
+def _cell(text_value: str) -> str:
+    """Значення, що починається з = + - @, Excel виконав би як формулу: додаємо апостроф (CSV-ін'єкція)."""
+    return "'" + text_value if text_value[:1] in "=+-@" else text_value
+
+
 def to_csv(report: ReportOut) -> str:
     """CSV для Excel: роздільник «;», кодування UTF-8 з BOM додає маршрут."""
     out = io.StringIO()
@@ -90,7 +107,7 @@ def to_csv(report: ReportOut) -> str:
                 *[f"{LABELS[m]} (сер.)" for m in COLUMN_METRICS], *[f"{LABELS[m]} (макс.)" for m in COLUMN_METRICS]])
     fmt = lambda v: "" if v is None else f"{v:.1f}"  # noqa: E731
     for r in report.rows:
-        w.writerow([r.name, TYPES.get(r.type, r.type), r.availability_pct, r.incidents, r.warning, r.critical, fmt(r.mean_detect_s),
+        w.writerow([_cell(r.name), TYPES.get(r.type, r.type), r.availability_pct, r.incidents, r.warning, r.critical, fmt(r.mean_detect_s),
                     fmt(r.mean_recover_s), *[fmt(r.metrics[m].avg) if m in r.metrics else "" for m in COLUMN_METRICS],
                     *[fmt(r.metrics[m].max) if m in r.metrics else "" for m in COLUMN_METRICS]])
     return out.getvalue()

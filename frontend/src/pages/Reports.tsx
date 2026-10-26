@@ -9,12 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getToken } from '@/lib/auth'
 import { duration, num } from '@/lib/format'
-import { metricLabel, metricUnit } from '@/lib/metrics'
+import { metricLabel, metricUnit, TYPE_LABEL } from '@/lib/metrics'
 import { reportParams, useReport, type ReportRange } from '@/lib/queries'
 import type { ReportRow } from '@/lib/types'
 
 const RANGES: [ReportRange, string][] = [['24h', '24 години'], ['7d', '7 днів'], ['30d', '30 днів']]
-const TYPE_LABEL: Record<string, string> = { server: 'Сервер', service: 'Сервіс', container: 'Контейнер', database: 'База даних' }
 
 const secs = (s: number | null) => (s == null ? '–' : duration(new Date(0).toISOString(), new Date(s * 1000).toISOString()))
 const stats = (r: ReportRow) =>

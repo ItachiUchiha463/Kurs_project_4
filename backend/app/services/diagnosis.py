@@ -21,9 +21,7 @@ def to_engine_rule(r: Rule) -> inference.Rule:
 
 async def _fact(db: AsyncSession, target_id: int, c: Condition, incident_instance: str, ref: datetime) -> float | None:
     params = {"t": target_id, "n": c.metric, "ref": ref}
-    inst = ""
-    if c.instance == "same":
-        inst = incident_instance
+    inst = incident_instance if c.instance == "same" else (c.instance or "")  # конкретне значення (наприклад, «/») береться як є
     where_inst = "" if c.instance == "any" else "AND instance = :i"
     if c.instance != "any":
         params["i"] = inst

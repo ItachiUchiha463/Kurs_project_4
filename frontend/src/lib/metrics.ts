@@ -51,6 +51,10 @@ export const FLAG_METRICS = new Set([
   'available', 'agent_alive', 'ping_available', 'container_running', 'db_up', 'container_oom_killed', 'container_health',
 ])
 
+/** Підписи, спільні для звітів, порогів і правил. */
+export const TYPE_LABEL: Record<string, string> = { server: 'Сервер', service: 'Сервіс', container: 'Контейнер', database: 'База даних' }
+export const AGG_LABEL: Record<string, string> = { last: 'останнє значення', avg: 'середнє', max: 'максимум', min: 'мінімум', delta: 'приріст' }
+
 export const metricLabel = (metric: string, instance = '') =>
   (METRICS[metric]?.label ?? metric) + (instance ? ` (${instance})` : '')
 

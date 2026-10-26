@@ -9,13 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { api, ApiError } from '@/lib/api'
-import { METRICS, metricLabel } from '@/lib/metrics'
+import { AGG_LABEL, METRICS, metricLabel, TYPE_LABEL } from '@/lib/metrics'
 import { useRules, useTargets } from '@/lib/queries'
 import type { Rule, RuleCondition, RuleTest } from '@/lib/types'
 
-const TYPES: [string, string][] = [['server', 'Сервер'], ['service', 'Сервіс'], ['container', 'Контейнер'], ['database', 'База даних']]
+const TYPES = Object.entries(TYPE_LABEL)
 const SCOPES: Record<RuleCondition['scope'], string> = { self: 'сам об’єкт', host: 'його сервер', siblings: 'сусідні об’єкти сервера' }
-const AGGS: Record<string, string> = { last: 'останнє', avg: 'середнє', max: 'максимум', min: 'мінімум', delta: 'приріст' }
 const OPS = ['>', '>=', '<', '<=', '==']
 const SIBLING_TYPES = [['container', 'контейнери'], ['database', 'бази даних'], ['service', 'сервіси']]
 
@@ -23,7 +22,7 @@ const SIBLING_TYPES = [['container', 'контейнери'], ['database', 'ба
 export function conditionText(c: RuleCondition) {
   const win = c.agg !== 'last' && c.window_s ? ` за ${Math.round(c.window_s / 60) || 1} хв` : ''
   const who = c.scope === 'siblings' ? `сусідні (${SIBLING_TYPES.find(([k]) => k === c.sibling_type)?.[1] ?? '?'}, ${c.match === 'all' ? 'усі' : 'хоч один'})` : SCOPES[c.scope]
-  return `${who}: ${metricLabel(c.metric)}, ${AGGS[c.agg]}${win} ${c.op} ${c.value}`
+  return `${who}: ${metricLabel(c.metric)}, ${AGG_LABEL[c.agg]}${win} ${c.op} ${c.value}`
 }
 
 interface CondForm { scope: RuleCondition['scope']; metric: string; op: string; value: string; agg: string; minutes: string; sibling_type: string; match: string }
@@ -98,7 +97,7 @@ function Editor({ rule, onClose }: { rule: Rule | null; onClose: () => void }) {
                   {Object.keys(METRICS).map((m) => <option key={m} value={m}>{metricLabel(m)}</option>)}
                 </select>
                 <select className={select} aria-label="Агрегація" value={c.agg} onChange={(e) => setCond(i, { agg: e.target.value })}>
-                  {Object.entries(AGGS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {Object.entries(AGG_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </select>
                 {c.agg !== 'last' && <Input aria-label="Вікно, хв" className="num w-20" inputMode="numeric" value={c.minutes} onChange={(e) => setCond(i, { minutes: e.target.value })} />}
                 {c.agg !== 'last' && <span className="text-sm text-muted-foreground">хв</span>}
