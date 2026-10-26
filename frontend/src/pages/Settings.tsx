@@ -11,6 +11,7 @@ import { api, ApiError } from '@/lib/api'
 import { metricLabel, metricUnit } from '@/lib/metrics'
 import { useTargets, useThresholds } from '@/lib/queries'
 import type { ThresholdItem } from '@/lib/types'
+import { Rules } from '@/pages/settings/Rules'
 
 const AGG: Record<string, string> = { last: 'останнє значення', avg: 'середнє', max: 'максимум', delta: 'приріст' }
 const SOURCE: Record<ThresholdItem['source'], string> = { default: 'Типовий', template: 'Мій шаблон', target: 'Для об’єкта' }
@@ -95,10 +96,17 @@ function Thresholds() {
 
 export function SettingsPage() {
   document.title = 'Налаштування – Vigil'
+  const [tab, setTab] = useState<'thresholds' | 'rules'>('thresholds')
   return (
     <>
       <PageHead title="Налаштування" subtitle="Порогові значення та правила виведення причин" />
-      <Thresholds />
+      <div role="tablist" aria-label="Розділи" className="flex gap-1 border-b">
+        {([['thresholds', 'Порогові значення'], ['rules', 'Правила виведення']] as const).map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+            className={`min-h-11 border-b-2 px-4 text-sm font-medium ${tab === k ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{l}</button>
+        ))}
+      </div>
+      {tab === 'thresholds' ? <Thresholds /> : <Rules />}
     </>
   )
 }

@@ -18,6 +18,14 @@ OWNED = [
     ("POST", "/api/incidents/{incident_id}/resolve", {"comment": "x"}),
 ]
 PUBLIC_WITH_PARAMS: set[str] = set()
+RULE_BODY = {"name": "Моє", "cause": "Причина", "recommendation": "Зробіть це", "applies_to": ["server"],
+             "conditions": [{"scope": "self", "metric": "cpu_usage", "op": ">", "value": 90}]}
+OWNED += [
+    ("PATCH", "/api/rules/{rule_id}", RULE_BODY),
+    ("DELETE", "/api/rules/{rule_id}", None),
+    ("PUT", "/api/rules/{rule_id}/enabled", {"enabled": False}),
+    ("POST", "/api/rules/{rule_id}/test?target_id={target_id}", None),
+]
 
 
 async def test_other_users_resources_are_404(client, user_factory):
@@ -26,12 +34,14 @@ async def test_other_users_resources_are_404(client, user_factory):
     t = await make_server(client, a)
     await client.post("/api/ingest", json=[rec("cpu_usage", 99)], headers={"Authorization": f"Bearer {t['agent_token']}"})
     [inc] = (await client.get("/api/incidents", headers=a)).json()
+    rule_id = (await client.post("/api/rules", json=RULE_BODY, headers=a)).json()["id"]
     for method, path, body in OWNED:
-        r = await client.request(method, path.format(target_id=t["id"], incident_id=inc["id"]), json=body, headers=b)
+        r = await client.request(method, path.format(target_id=t["id"], incident_id=inc["id"], rule_id=rule_id), json=body, headers=b)
         assert r.status_code == 404, (method, path, r.status_code)
     # а власник усе ще бачить свій об'єкт: чужі спроби нічого не видалили
     assert (await client.get(f"/api/targets/{t['id']}", headers=a)).status_code == 200
     assert (await client.get(f"/api/incidents/{inc['id']}", headers=a)).json()["status"] == "open"
+    assert any(r["id"] == rule_id for r in (await client.get("/api/rules", headers=a)).json())  # чуже видалення не спрацювало
 
 
 async def test_lists_contain_only_own_data(client, user_factory):

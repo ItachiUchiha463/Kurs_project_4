@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
     quota_targets: int = 20
+    quota_rules: int = 50  # власних правил виведення на користувача (ТЗ 2.4)
     ingest_min_interval_s: float = 5  # не частіше за один запит /ingest від агента (ТЗ 2.4)
     max_series_per_target: int = 100  # різних рядів (метрика + instance) від одного об'єкта
     global_users: int = 100  # після цього реєстрація закривається (ТЗ 2.4)

@@ -1,3 +1,4 @@
+import { conditionText } from '@/pages/settings/Rules'
 import { describe, expect, it } from 'vitest'
 
 import { forgotSchema, loginSchema, registerSchema, resetSchema, resolveSchema, targetSchema } from '@/forms/schemas'
@@ -67,5 +68,14 @@ describe('скидання пароля', () => {
     expect(resetSchema.safeParse({ password: 'short1', repeat: 'short1' }).success).toBe(false)
     expect(forgotSchema.safeParse({ email: 'a@example.ua' }).success).toBe(true)
     expect(forgotSchema.safeParse({ email: 'nope' }).success).toBe(false)
+  })
+})
+
+describe('правила', () => {
+  it('умова описується людською мовою', () => {
+    const text = conditionText({ scope: 'host', metric: 'cpu_usage', op: '>', value: 90, agg: 'avg', window_s: 300, instance: null, sibling_type: null, match: 'any' })
+    expect(text).toBe('його сервер: Завантаження CPU, середнє за 5 хв > 90')
+    expect(conditionText({ scope: 'siblings', metric: 'db_up', op: '==', value: 0, agg: 'last', window_s: 0, instance: null, sibling_type: 'database', match: 'all' }))
+      .toContain('сусідні (бази даних, усі)')
   })
 })

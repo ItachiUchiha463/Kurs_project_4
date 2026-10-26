@@ -1,13 +1,13 @@
 """Збір фактів для рушія виведення й збереження діагнозу (ТЗ розд. 8.2)."""
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine import inference
 from app.engine.thresholds import AGG_SQL
 from app.engine.inference import Condition
-from app.models import Diagnosis, Incident, Rule, Target
+from app.models import Diagnosis, Incident, Rule, RuleOverride, Target
 
 NO_CAUSE = "Причину не визначено"
 NO_CAUSE_HINT = "Перегляньте графіки метрик за час інциденту."
@@ -58,22 +58,35 @@ async def host_of(db: AsyncSession, target: Target) -> Target | None:
     return await db.scalar(select(Target).where(Target.id == target.host_id, Target.owner_id == target.owner_id))
 
 
-async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target, ref: datetime) -> Diagnosis:
-    rows = await db.scalars(select(Rule).where(Rule.enabled, or_(Rule.owner_id.is_(None), Rule.owner_id == target.owner_id)))
-    rules = [to_engine_rule(r) for r in rows if target.type in r.applies_to]
+async def active_rules(db: AsyncSession, owner_id: int, target_type: str) -> list[inference.Rule]:
+    """Базові й власні правила, що діють для цього користувача: базові можна вимкнути (rule_overrides), власні – полем enabled."""
+    rows = await db.execute(select(Rule, RuleOverride.enabled).outerjoin(
+        RuleOverride, and_(RuleOverride.rule_id == Rule.id, RuleOverride.owner_id == owner_id))
+        .where(or_(Rule.owner_id.is_(None), Rule.owner_id == owner_id)))
+    return [to_engine_rule(r) for r, override in rows if (r.enabled if override is None else override) and target_type in r.applies_to]
+
+
+async def collect_facts(db: AsyncSession, target: Target, rules: list[inference.Rule], incident_instance: str,
+                        ref: datetime) -> tuple[dict[tuple, float | list[float] | None], dict[str, str]]:
+    """Значення метрик для всіх умов правил: (факти, імена учасників для пояснення)."""
     host = await host_of(db, target)
     subjects = {"self": target, "host": host}
-    facts: dict[tuple, float | None] = {}
+    facts: dict[tuple, float | list[float] | None] = {}
     for rule in rules:
         for c in rule.conditions:
             if c.fact_key in facts:
                 continue
             if c.scope == "siblings":
-                facts[c.fact_key] = await _sibling_values(db, target, c, incident.instance, ref)
+                facts[c.fact_key] = await _sibling_values(db, target, c, incident_instance, ref)
                 continue
             subject = subjects[c.scope]
-            facts[c.fact_key] = await _fact(db, subject.id, c, incident.instance, ref) if subject else None
-    names = {"self": target.name, "host": host.name if host else "–", "siblings": "на тому ж сервері"}
+            facts[c.fact_key] = await _fact(db, subject.id, c, incident_instance, ref) if subject else None
+    return facts, {"self": target.name, "host": host.name if host else "–", "siblings": "на тому ж сервері"}
+
+
+async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target, ref: datetime) -> Diagnosis:
+    rules = await active_rules(db, target.owner_id, target.type)
+    facts, names = await collect_facts(db, target, rules, incident.instance, ref)
     result = inference.diagnose(rules, facts, names, target.type)
 
     primary = result.primary

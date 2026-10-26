@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import { getToken } from '@/lib/auth'
-import type { Incident, IncidentDetail, Me, Point, Report, Target, ThresholdItem } from '@/lib/types'
+import type { Incident, IncidentDetail, Me, Point, Report, Rule, Target, ThresholdItem } from '@/lib/types'
 
 export type Range = '1h' | '24h' | '7d' | '30d'
 export const RANGE_MINUTES: Record<Range, number> = { '1h': 60, '24h': 1440, '7d': 10_080, '30d': 43_200 }
@@ -60,3 +60,5 @@ export const useThresholds = (targetId?: number) =>
     queryFn: () => api<ThresholdItem[]>('/thresholds', { params: { target_id: targetId } }),
     staleTime: 60_000,
   })
+
+export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })

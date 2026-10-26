@@ -121,3 +121,31 @@ export interface ThresholdItem {
   source: 'default' | 'template' | 'target'
   levels_editable: boolean
 }
+
+export interface RuleCondition {
+  scope: 'self' | 'host' | 'siblings'
+  metric: string
+  op: string
+  value: number
+  agg: 'last' | 'avg' | 'max' | 'min' | 'delta'
+  window_s: number
+  instance: string | null
+  sibling_type: 'container' | 'database' | 'service' | null
+  match: 'any' | 'all'
+}
+export interface Rule {
+  id: number
+  name: string
+  cause: string
+  recommendation: string
+  applies_to: string[]
+  conditions: RuleCondition[]
+  priority: number
+  enabled: boolean
+  own: boolean
+}
+export interface RuleTest {
+  ratio: number
+  matched: boolean
+  evidence: { ok: boolean; text: string; value: string }[]
+}

@@ -9,6 +9,10 @@ CONTAINER_METRICS = {
     "container_running", "container_health", "container_restarts", "container_oom_killed", "container_exit_code",
     "container_mem_bytes", "container_net_in", "container_net_out", "container_block_read", "container_block_write",
 }
+SERVER_SIDE_METRICS = {  # метрики перевірок із боку сервера й агента-життєздатності
+    "available", "response_ms", "status_code", "packet_loss", "ping_available", "ping_ms", "agent_alive",
+}
 AGENT_METRICS = PERCENT_METRICS | CONTAINER_METRICS | DB_METRICS | {
     "load_avg", "cpu_cores", "load_per_core", "net_in", "net_out", "net_total", "process_count",
 }
+KNOWN_METRICS = AGENT_METRICS | SERVER_SIDE_METRICS  # метрики, що можна вказувати в умовах власних правил
