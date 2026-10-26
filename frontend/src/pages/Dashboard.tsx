@@ -69,7 +69,7 @@ export function DashboardPage() {
   const [filter, setFilter] = useState<'all' | 'server' | 'service'>('all')
 
   if (targets.isPending) return <><PageHead title="Дашборд" /><Skeleton className="h-64 w-full" /></>
-  const all = targets.data ?? []
+  const all = (targets.data ?? []).filter((t) => t.type === 'server' || t.type === 'service')  // контейнери – на сторінці свого сервера
   if (all.length === 0) {
     return (
       <>

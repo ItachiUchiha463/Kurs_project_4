@@ -12,13 +12,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { ago, duration } from '@/lib/format'
 import { metricLabel } from '@/lib/metrics'
-import { useIncidents, useTarget, type Range } from '@/lib/queries'
+import { useChildren, useIncidents, useTarget, type Range } from '@/lib/queries'
 import { agentConfig } from '@/pages/AddServer'
 
 export function TargetPage() {
   const id = Number(useParams().id)
   const t = useTarget(id)
   const incidents = useIncidents({ target_id: id })
+  const children = useChildren(id, t.data?.type === 'server')
   const [range, setRange] = useState<Range>('1h')
   const [tab, setTab] = useState<'charts' | 'incidents'>('charts')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -40,17 +41,26 @@ export function TargetPage() {
     toast.success(`Об’єкт «${target.name}» видалено`)
     navigate('/')
   }
+  const hide = async () => {
+    await api(`/targets/${id}/hidden`, { method: 'PUT', body: { hidden: true } })
+    qc.invalidateQueries({ queryKey: ['targets'] })
+    qc.invalidateQueries({ queryKey: ['children', target.host_id] })
+    toast.success(`Контейнер «${target.name}» сховано`)
+    navigate(target.host_id ? `/targets/${target.host_id}` : '/')
+  }
   const rotate = async () => setNewToken((await api<{ agent_token: string }>(`/targets/${id}/agent-token`, { method: 'POST' })).agent_token)
 
   return (
     <>
       <Link to="/" className="text-sm font-medium text-primary hover:underline">← Дашборд</Link>
       <PageHead title={target.name}
-        subtitle={<>{target.type === 'server' ? 'Сервер' : `Сервіс · ${target.address}`} · дані: {ago(target.last_seen)}{target.agent_version && ` · агент ${target.agent_version}`}</>}
+        subtitle={<>{target.type === 'server' ? 'Сервер' : target.type === 'container' ? `Контейнер · ${target.address}` : `Сервіс · ${target.address}`} · дані: {ago(target.last_seen)}{target.agent_version && ` · агент ${target.agent_version}`}</>}
         actions={<>
           <StatusBadge status={target.status} />
           {target.type === 'server' && <Button variant="outline" size="sm" onClick={rotate}>Новий токен агента</Button>}
-          <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)}>Видалити</Button>
+          {target.source === 'discovered'
+            ? <Button variant="outline" size="sm" onClick={hide}>Сховати</Button>
+            : <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)}>Видалити</Button>}
         </>} />
 
       {clockDrift && (
@@ -65,6 +75,27 @@ export function TargetPage() {
             className={`min-h-11 border-b-2 px-4 text-sm font-medium ${tab === k ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{l}</button>
         ))}
       </div>
+
+      {tab === 'charts' && (children.data ?? []).length > 0 && (
+        <section aria-label="Контейнери" className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <h2 className="border-b p-4 font-semibold">Контейнери ({children.data!.filter((c) => !c.hidden).length})</h2>
+          <ul>
+            {children.data!.filter((c) => !c.hidden).map((c) => (
+              <li key={c.id} className="border-b last:border-b-0">
+                <Link to={`/targets/${c.id}`} className="flex flex-wrap items-center gap-3 p-4 hover:bg-muted">
+                  <StatusBadge status={c.status} />
+                  <span className="font-medium">{c.name}</span>
+                  <span className="text-sm text-muted-foreground">{c.address}</span>
+                  <span className="num ml-auto text-sm text-muted-foreground">
+                    {'container_cpu' in c.latest && `CPU ${Math.round(c.latest.container_cpu)} %`}
+                    {'container_mem' in c.latest && ` · RAM ${Math.round(c.latest.container_mem)} %`}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {tab === 'charts' ? (
         <>
@@ -85,6 +116,11 @@ export function TargetPage() {
                   <MetricChart targetId={id} metric="net_total" range={range} />
                   {'load_per_core' in target.latest && <MetricChart targetId={id} metric="load_per_core" range={range} />}
                   {target.ping_enabled && <MetricChart targetId={id} metric="ping_ms" range={range} />}
+                </>
+              ) : target.type === 'container' ? (
+                <>
+                  <MetricChart targetId={id} metric="container_cpu" range={range} />
+                  <MetricChart targetId={id} metric="container_mem" range={range} />
                 </>
               ) : (
                 <>

@@ -95,3 +95,17 @@ sudo systemctl daemon-reload && sudo systemctl enable --now vigil-agent
 6. Другий обліковий запис не бачить об'єктів першого (автоматичний тест ізоляції: `pytest tests/test_isolation.py`).
 
 Telegram потребує прив'язки: Профіль → «Підключити Telegram» → «Start» у боті.
+
+## 5. Моніторинг Docker-контейнерів
+
+Агент читає Docker Engine API. Доступ до `docker.sock` – це фактично права root, тому агент **не** отримує сокет напряму: поруч запускається `docker-socket-proxy`, який пропускає лише читання списку контейнерів, їхнього стану й статистики:
+
+```bash
+docker run -d --name vigil-docker-proxy --restart unless-stopped \
+  -p 127.0.0.1:2375:2375 -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e CONTAINERS=1 -e EVENTS=1 -e INFO=1 -e POST=0 tecnativa/docker-socket-proxy
+```
+
+Порт опублікований лише на `127.0.0.1`, назовні він не відкривається. У `agent.toml` додайте `docker = true` (адреса за замовчуванням `tcp://127.0.0.1:2375`) і перезапустіть агента. Контейнери з'являться як дочірні об'єкти сервера. Щоб виключити контейнер, додайте йому мітку `vigil.ignore=true` або маску імені в `docker_ignore`.
+
+Docker Desktop на Windows віддає API через іменований канал (`npipe`), який агент не підтримує: у налаштуваннях Docker Desktop ввімкніть «Expose daemon on tcp://localhost:2375 without TLS» (лише для особистого ПК) і вкажіть `docker_url = "tcp://localhost:2375"`.

@@ -1,4 +1,4 @@
-"""Базові правила (ТЗ 8.3): 1, 2, 3, 4, 5, 6, 8, 9, 10 та запасні варіанти 5 і 8 без ping (сервер у закритій мережі).
+"""Базові правила (ТЗ 8.3): 1–6, 8–15 та запасні варіанти 5 і 8 без ping (сервер у закритій мережі).
 
 Перша умова кожного правила – симптом об'єкта (`self`), для якого є типовий поріг (ТЗ 7.3, «правило повноти»).
 """
@@ -50,6 +50,26 @@ BASE_RULES = [
      "conditions": [c("self", "packet_loss", ">", 10, "avg", 300)],
      "cause": "Нестабільне мережеве з'єднання",
      "recommendation": "Перевірте мережеве обладнання та канал зв'язку."},
+    {"name": "Контейнер убито через нестачу пам'яті", "applies_to": ["container"], "priority": 10,
+     "conditions": [c("self", "container_running", "==", 0), c("self", "container_oom_killed", "==", 1)],
+     "cause": "Контейнер убито через нестачу пам'яті",
+     "recommendation": "Збільште ліміт --memory або знайдіть витік пам'яті в застосунку."},
+    {"name": "Контейнер перезапускається (crash loop)", "applies_to": ["container"], "priority": 10,
+     "conditions": [c("self", "container_restarts", ">=", 3, "delta", 600), c("self", "container_mem", "<", 50, "max", 600)],
+     "cause": "Застосунок у контейнері падає з помилкою (crash loop)",
+     "recommendation": "Перегляньте docker logs --tail 100 контейнера і код виходу."},
+    {"name": "Контейнер зупинено штатно", "applies_to": ["container"], "priority": 10,
+     "conditions": [c("self", "container_running", "==", 0), c("self", "container_exit_code", "==", 0)],
+     "cause": "Контейнер зупинено штатно (вручну чи після завершення задачі)",
+     "recommendation": "Переконайтеся, що зупинка запланована; для сервісів задайте restart: unless-stopped."},
+    {"name": "Контейнер забирає процесор сервера", "applies_to": ["container"], "priority": 10,
+     "conditions": [c("self", "container_cpu", ">", 70, "avg", 300), c("host", "cpu_usage", ">", 90, "avg", 300)],
+     "cause": "Контейнер забирає більшу частину процесора сервера",
+     "recommendation": "Обмежте --cpus або масштабуйте сервіс."},
+    {"name": "Контейнер не проходить healthcheck", "applies_to": ["container"], "priority": 10,
+     "conditions": [c("self", "container_health", "==", 0), c("self", "container_running", "==", 1)],
+     "cause": "Контейнер працює, але не проходить healthcheck",
+     "recommendation": "Перевірте залежності застосунку (БД, зовнішні API)."},
     {"name": "Агент або сервер недоступні", "applies_to": ["server"], "priority": 5,
      "conditions": [c("self", "agent_alive", "==", 0)],
      "cause": "Сервер вимкнений, недоступний мережею або зупинено агента",

@@ -8,13 +8,14 @@ from typing import Literal
 
 Severity = Literal["warning", "critical"]
 Direction = Literal["above", "below", "equals"]
+AGG_SQL = {"avg": "avg(value)", "max": "max(value)", "min": "min(value)", "delta": "(max(value) - min(value))"}  # агрегати за вікно в SQL
 HYSTERESIS = 0.05  # закриття після повернення за поріг ще на 5 % (ТЗ 7.1)
 
 
 @dataclass(frozen=True)
 class Threshold:
     metric: str
-    agg: Literal["last", "avg", "max"] = "last"
+    agg: Literal["last", "avg", "max", "delta"] = "last"  # delta – приріст лічильника за вікно (max − min)
     window_s: int = 0
     warn: float | None = None
     crit: float | None = None

@@ -52,6 +52,21 @@ async def get_target(db: AsyncSession, user: User, target_id: int) -> TargetOut:
     return _out(target, latest.get(target.id))
 
 
+async def list_children(db: AsyncSession, user: User, target_id: int) -> list[TargetOut]:
+    server = await get_or_404(db, user, target_id)
+    kids = await repo.children(db, user.id, server.id)
+    latest = await metrics_repo.latest(db, [k.id for k in kids])
+    return [_out(k, latest.get(k.id)) for k in kids]
+
+
+async def set_hidden(db: AsyncSession, user: User, target_id: int, hidden: bool) -> TargetOut:
+    target = await get_or_404(db, user, target_id)
+    if target.source != "discovered":
+        raise Unprocessable("Приховати можна лише виявлений об'єкт")
+    target.hidden = hidden
+    return _out(target)
+
+
 async def create_target(db: AsyncSession, user: User, data: TargetCreate) -> TargetCreated:
     if await repo.count(db, user.id) >= settings.quota_targets:
         raise QuotaExceeded(f"Ліміт об'єктів: {settings.quota_targets}", details=[{"limit": settings.quota_targets}])

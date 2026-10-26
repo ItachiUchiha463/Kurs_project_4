@@ -9,9 +9,10 @@ from logging.handlers import RotatingFileHandler
 
 import httpx
 
+from collectors.docker import DockerCollector, client_for
 from collectors.system import SystemCollector
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 MAX_RECORDS = 500  # ліміт сервісу на один запит
 MAX_BUFFERED = 100  # пакетів, що чекають, поки відновиться зв'язок
 UNAUTHORIZED_PAUSE_S = 300  # невірний токен: не засипаємо сервер запитами
@@ -28,6 +29,7 @@ class Sender:
 
     def __init__(self, client: httpx.Client, server: str, token: str, interval: int = 15):
         self.client, self.url = client, server.rstrip("/") + "/api/ingest"
+        self.containers: list[dict] | None = None  # знімок списку контейнерів: лише останній, у чергу не потрапляє
         self.headers = {"Authorization": f"Bearer {token}", "X-Agent-Version": VERSION, "X-Agent-Interval": str(interval)}
         self.queue: deque[list[dict]] = deque(maxlen=MAX_BUFFERED)
 
@@ -41,12 +43,14 @@ class Sender:
             count += 1
         return count, records
 
-    def send(self, batch: list[dict]) -> int | None:
+    def send(self, batch: list[dict], containers: list[dict] | None = None) -> int | None:
         """Один запит за цикл. Повертає HTTP-код відповіді, None – якщо зв'язку немає. 401 зупиняє надсилання."""
         self.queue.append(batch)
+        self.containers = containers
         count, records = self._next_request()
         try:
-            r = self.client.post(self.url, json=records, headers={**self.headers, "X-Agent-Time": now_iso()})
+            payload = records if self.containers is None else {"records": records, "containers": self.containers}
+            r = self.client.post(self.url, json=payload, headers={**self.headers, "X-Agent-Time": now_iso()})
         except httpx.HTTPError as e:
             log.warning("немає зв'язку з сервісом: %s (у черзі %d)", e, len(self.queue))
             return None
@@ -62,9 +66,10 @@ class Sender:
         return r.status_code
 
 
-def make_batch(host: str, samples: list[tuple[str, str, float]]) -> list[dict]:
+def make_batch(host: str, samples: list[tuple[str, str, float]], docker_samples: list[tuple[str, str, float]] = ()) -> list[dict]:
     ts = now_iso()
-    return [{"host": host, "metric": m, "instance": inst, "value": v, "timestamp": ts} for m, inst, v in samples]
+    own = [{"host": host, "metric": m, "instance": inst, "value": v, "timestamp": ts} for m, inst, v in samples]
+    return own + [{"host": host, "target": f"docker:{cid}", "metric": m, "value": v, "timestamp": ts} for cid, m, v in docker_samples]
 
 
 def setup_logging(path: str) -> None:
@@ -84,12 +89,19 @@ def main() -> None:
     setup_logging(args.log)
     interval = max(int(cfg.get("interval", 15)), 15)
     collector = SystemCollector(cfg.get("disks"))
+    docker = DockerCollector(client_for(cfg.get("docker_url", "tcp://127.0.0.1:2375")), cfg.get("docker_ignore")) if cfg.get("docker") else None
     with httpx.Client(timeout=10) as client:
         sender = Sender(client, cfg["server"], cfg["token"], interval)
         log.info("агент %s запущено, інтервал %d с", VERSION, interval)
         while True:
             time.sleep(interval)
-            status = sender.send(make_batch(cfg["host"], collector.collect()))
+            containers, docker_samples = None, []
+            if docker:
+                try:
+                    containers, docker_samples = docker.collect()
+                except (httpx.HTTPError, ValueError) as e:  # Docker недоступний: система й надалі збирається
+                    log.warning("Docker недоступний: %s", type(e).__name__)
+            status = sender.send(make_batch(cfg["host"], collector.collect(), docker_samples), containers)
             if status == 401:
                 time.sleep(UNAUTHORIZED_PAUSE_S)
 

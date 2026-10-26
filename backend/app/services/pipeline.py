@@ -7,7 +7,7 @@ from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS
-from app.engine.thresholds import Deescalate, Escalate, Open, Resolve, State, Threshold, step
+from app.engine.thresholds import AGG_SQL, Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
 from app.notify import outbox
@@ -42,9 +42,8 @@ class Change:
 async def _aggregate(db: AsyncSession, target_id: int, p: Point, th: Threshold) -> float:
     if th.agg == "last" or th.window_s <= 0:
         return p.value
-    fn = "avg" if th.agg == "avg" else "max"
     row = await db.execute(text(
-        f"SELECT {fn}(value) FROM metrics WHERE target_id = :t AND name = :n AND instance = :i AND ts > :s AND ts <= :e"),
+        f"SELECT {AGG_SQL[th.agg]} FROM metrics WHERE target_id = :t AND name = :n AND instance = :i AND ts > :s AND ts <= :e"),
         {"t": target_id, "n": p.metric, "i": p.instance, "s": p.ts - timedelta(seconds=th.window_s), "e": p.ts})
     value = row.scalar()  # None, лише якщо вікно порожнє
     return p.value if value is None else value

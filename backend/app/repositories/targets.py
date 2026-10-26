@@ -6,7 +6,12 @@ from app.models import Target
 
 
 async def list_all(db: AsyncSession, owner_id: int) -> list[Target]:
-    return list(await db.scalars(select(Target).where(Target.owner_id == owner_id).order_by(Target.id)))
+    return list(await db.scalars(select(Target).where(Target.owner_id == owner_id, Target.hidden.is_(False)).order_by(Target.id)))
+
+
+async def children(db: AsyncSession, owner_id: int, host_id: int) -> list[Target]:
+    return list(await db.scalars(select(Target).where(Target.owner_id == owner_id, Target.host_id == host_id,
+                                                      Target.source == "discovered").order_by(Target.name)))
 
 
 async def get(db: AsyncSession, owner_id: int, target_id: int) -> Target | None:
@@ -14,7 +19,7 @@ async def get(db: AsyncSession, owner_id: int, target_id: int) -> Target | None:
 
 
 async def count(db: AsyncSession, owner_id: int) -> int:
-    return await db.scalar(select(func.count()).select_from(Target).where(Target.owner_id == owner_id))
+    return await db.scalar(select(func.count()).select_from(Target).where(Target.owner_id == owner_id, Target.source == "manual"))
 
 
 def add(db: AsyncSession, owner_id: int, **fields) -> Target:
@@ -24,6 +29,7 @@ def add(db: AsyncSession, owner_id: int, **fields) -> Target:
 
 
 async def remove(db: AsyncSession, owner_id: int, target_id: int) -> bool:
+    await db.execute(delete(Target).where(Target.host_id == target_id, Target.owner_id == owner_id, Target.source == "discovered"))  # контейнери зникають разом із сервером
     res = await db.execute(delete(Target).where(Target.id == target_id, Target.owner_id == owner_id))
     return res.rowcount > 0
 

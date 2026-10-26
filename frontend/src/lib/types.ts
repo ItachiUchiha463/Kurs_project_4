@@ -6,7 +6,9 @@ export type IncidentStatus = 'open' | 'acknowledged' | 'resolved' | 'suppressed'
 export interface Target {
   id: number
   name: string
-  type: 'server' | 'service'
+  type: 'server' | 'service' | 'container' | 'database'
+  source: 'manual' | 'discovered'
+  hidden: boolean
   check_type: 'agent' | 'http' | 'tcp' | 'ping'
   address: string | null
   host_id: number | null

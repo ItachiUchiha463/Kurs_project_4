@@ -15,6 +15,9 @@ export const useTargets = () => useQuery({ queryKey: ['targets'], queryFn: () =>
 export const useTarget = (id: number) =>
   useQuery({ queryKey: ['target', id], queryFn: () => api<Target>(`/targets/${id}`) })
 
+export const useChildren = (id: number, enabled: boolean) =>
+  useQuery({ queryKey: ['children', id], queryFn: () => api<Target[]>(`/targets/${id}/children`), enabled })
+
 export interface IncidentFilters {
   status?: 'active' | 'resolved'
   severity?: 'warning' | 'critical'

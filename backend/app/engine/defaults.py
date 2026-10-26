@@ -13,7 +13,14 @@ DEFAULT_THRESHOLDS: dict[str, Threshold] = {t.metric: t for t in [
     _T("available", "last", 0, crit=0, direction="equals", duration_s=30),
     _T("ping_available", "last", 0, crit=0, direction="equals", duration_s=30),
     _T("agent_alive", "last", 0, crit=0, direction="equals", duration_s=0),
+    # контейнери (ТЗ 5.3, 7.3)
+    _T("container_running", "last", 0, crit=0, direction="equals", duration_s=30),
+    _T("container_oom_killed", "last", 0, crit=1, direction="equals", duration_s=0),
+    _T("container_health", "last", 0, crit=0, direction="equals", duration_s=60),
+    _T("container_mem", "avg", 120, warn=85, crit=95, duration_s=0),
+    _T("container_cpu", "avg", 300, warn=80, crit=95, duration_s=0),
+    _T("container_restarts", "delta", 600, warn=0, crit=2, duration_s=0),  # ≥ 1 і ≥ 3 перезапусків за 10 хв (лічильник цілий)
 ]}
 
 # метрики, інцидент на яких робить об'єкт «недоступним», а не «критичним» (ТЗ 7.2)
-AVAILABILITY_METRICS = {"available", "agent_alive", "ping_available"}
+AVAILABILITY_METRICS = {"available", "agent_alive", "ping_available", "container_running"}

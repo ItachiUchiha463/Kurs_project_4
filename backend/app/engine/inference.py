@@ -17,9 +17,11 @@ METRIC_LABELS = {
     "load_per_core": "Навантаження на ядро", "response_ms": "Час відповіді", "available": "Доступність",
     "agent_alive": "Агент працює", "status_code": "HTTP-код", "net_total": "Мережа",
     "ping_available": "Ping", "packet_loss": "Втрати пакетів",
+    "container_running": "Контейнер працює", "container_oom_killed": "Нестача пам'яті (OOM)", "container_exit_code": "Код виходу",
+    "container_health": "Healthcheck", "container_restarts": "Перезапуски", "container_cpu": "CPU контейнера", "container_mem": "RAM контейнера",
 }
-UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%"}
-AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум"}
+UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%", "container_cpu": "%", "container_mem": "%"}
+AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум", "delta": "приріст"}
 
 
 @dataclass(frozen=True)

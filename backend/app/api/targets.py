@@ -6,7 +6,7 @@ from fastapi import APIRouter, Header, Query, Response, status
 from app.deps import CurrentUser, DbDep
 from app.errors import AuthError
 from app.schemas.targets import (
-    AgentTokenOut, IngestOut, IngestRecord, Point, TargetCreate, TargetCreated, TargetOut,
+    AgentTokenOut, HiddenIn, IngestBatch, IngestOut, IngestRecord, Point, TargetCreate, TargetCreated, TargetOut,
 )
 from app.services import ingest as ingest_service
 from app.services import targets as service
@@ -36,6 +36,16 @@ async def delete_target(target_id: int, user: CurrentUser, db: DbDep):
     await service.delete_target(db, user, target_id)
 
 
+@router.get("/targets/{target_id}/children", response_model=list[TargetOut])
+async def children(target_id: int, user: CurrentUser, db: DbDep):
+    return await service.list_children(db, user, target_id)
+
+
+@router.put("/targets/{target_id}/hidden", response_model=TargetOut)
+async def set_hidden(target_id: int, data: HiddenIn, user: CurrentUser, db: DbDep):
+    return await service.set_hidden(db, user, target_id, data.hidden)
+
+
 @router.post("/targets/{target_id}/agent-token", response_model=AgentTokenOut)
 async def agent_token(target_id: int, user: CurrentUser, db: DbDep):
     return AgentTokenOut(agent_token=await service.rotate_token(db, user, target_id))
@@ -51,7 +61,7 @@ async def target_metrics(target_id: int, user: CurrentUser, db: DbDep, name: str
 
 
 @router.post("/ingest", response_model=IngestOut)
-async def ingest(records: list[IngestRecord], db: DbDep,
+async def ingest(payload: IngestBatch | list[IngestRecord], db: DbDep,
                  authorization: Annotated[str | None, Header()] = None,
                  x_agent_time: Annotated[datetime | None, Header()] = None,
                  x_agent_version: Annotated[str | None, Header()] = None,
@@ -59,4 +69,5 @@ async def ingest(records: list[IngestRecord], db: DbDep,
     scheme, _, token = (authorization or "").partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise AuthError("Потрібен токен агента")
-    return await ingest_service.ingest(db, token, records, x_agent_time, x_agent_version, x_agent_interval)
+    batch = payload if isinstance(payload, IngestBatch) else IngestBatch(records=payload)
+    return await ingest_service.ingest(db, token, batch, x_agent_time, x_agent_version, x_agent_interval)

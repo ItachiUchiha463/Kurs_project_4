@@ -44,6 +44,8 @@ class TargetOut(BaseModel):
     address: str | None
     host_id: int | None = None
     ping_enabled: bool = False
+    source: str = "manual"
+    hidden: bool = False
     interval_s: int
     status: str
     last_seen: datetime | None
@@ -54,6 +56,10 @@ class TargetOut(BaseModel):
 
 class TargetCreated(TargetOut):
     agent_token: str | None = None  # показується один раз
+
+
+class HiddenIn(BaseModel):
+    hidden: bool
 
 
 class AgentTokenOut(BaseModel):
@@ -68,6 +74,19 @@ class IngestRecord(BaseModel):
     unit: str | None = None
     timestamp: datetime
     target: str | None = None
+
+
+class ContainerInfo(BaseModel):
+    """Контейнер, виявлений агентом на сервері (ТЗ 5.3)."""
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=100)
+    image: str = Field(default="", max_length=200)
+    state: str = Field(default="", max_length=30)
+
+
+class IngestBatch(BaseModel):
+    records: list[IngestRecord]
+    containers: list[ContainerInfo] = []
 
 
 class IngestRejected(BaseModel):

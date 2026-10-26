@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -10,13 +10,16 @@ from app.errors import AppError, AuthError, TooManyRequests
 from app.metric_catalog import AGENT_METRICS, PERCENT_METRICS
 from app.repositories import metrics as metrics_repo
 from app.repositories import targets as targets_repo
-from app.schemas.targets import IngestOut, IngestRecord, IngestRejected
+from app.models import Target
+from app.schemas.targets import ContainerInfo, IngestBatch, IngestOut, IngestRecord, IngestRejected
 from app.security import hash_token
 from app.services import pipeline
 
 log = logging.getLogger("vigil.ingest")
 MAX_BATCH = 500
 MAX_INSTANCE_LEN = 100
+MAX_CONTAINERS = 100  # виявлених контейнерів на один сервер (ТЗ 2.4)
+GONE_HIDE_AFTER = timedelta(hours=24)  # контейнер, що зник із Docker, ховається через добу (ТЗ 5.3)
 _last_ingest: dict[int, float] = {}  # shortcut: у пам'яті процесу; рівно один процес (ТЗ розд. 3), при масштабуванні – у БД
 
 
@@ -42,8 +45,6 @@ def check_record(rec: IngestRecord, host_name: str, ts: datetime, now: datetime)
     """Причина відхилення запису або None (ТЗ розд. 6)."""
     if rec.host != host_name:
         return "host не збігається з об'єктом токена"
-    if rec.target is not None:
-        return "дочірні об'єкти поки не підтримуються"
     if rec.metric not in AGENT_METRICS:
         return "невідома метрика"
     if len(rec.instance) > MAX_INSTANCE_LEN:
@@ -64,8 +65,36 @@ def clock_offset(agent_time: datetime | None, now: datetime) -> timedelta:
     return now - agent_time if agent_time else timedelta(0)
 
 
-async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
-                 agent_time: datetime | None, agent_version: str | None, agent_interval: int | None = None) -> IngestOut:
+async def sync_containers(db: AsyncSession, server: Target, found: list[ContainerInfo], now: datetime) -> dict[str, Target]:
+    """Автовиявлення (ТЗ 5.3): новий контейнер стає дочірнім об'єктом сервера, а зниклий ховається через 24 год."""
+    children = {c.external_id: c for c in await db.scalars(
+        select(Target).where(Target.host_id == server.id, Target.check_type == "docker"))}
+    seen = set()
+    for info in found[:MAX_CONTAINERS]:
+        seen.add(info.id)
+        child = children.get(info.id)
+        if child is None:
+            child = Target(owner_id=server.owner_id, name=info.name, type="container", check_type="docker", source="discovered",
+                           host_id=server.id, external_id=info.id, address=info.image, interval_s=server.interval_s)
+            db.add(child)
+            children[info.id] = child
+        else:
+            child.name, child.address = info.name, info.image
+    for ext_id, child in children.items():
+        if ext_id not in seen and not child.hidden and (child.last_seen or child.created_at or now) < now - GONE_HIDE_AFTER:
+            child.hidden = True
+    await db.flush()
+    return children
+
+
+def _child_id(rec: IngestRecord) -> str | None:
+    """«docker:<id>» -> id контейнера; None для записів самого сервера."""
+    return rec.target.partition(":")[2] if rec.target else None
+
+
+async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: datetime | None, agent_version: str | None,
+                 agent_interval: int | None = None) -> IngestOut:
+    records = batch.records
     target = await targets_repo.get_by_agent_token(db, hash_token(token))
     if not target or not target.enabled:
         raise AuthError("Невірний токен агента")
@@ -82,31 +111,46 @@ async def ingest(db: AsyncSession, token: str, records: list[IngestRecord],
     if agent_interval:
         target.agent_interval_s = max(15, min(3600, agent_interval))
     fresh_after = now - timedelta(seconds=2 * target.effective_interval_s)
-    known = await _known_series(db, target.id)
-    fresh: list[pipeline.Point] = []
+    children = await sync_containers(db, target, batch.containers, now) if batch.containers or any(r.target for r in records) else {}
+    known: dict[int, set] = {}
+    fresh: dict[int, list[pipeline.Point]] = {target.id: []}
+    owners = {target.id: target}
     for i, rec in enumerate(records):
         ts = (rec.timestamp if rec.timestamp.tzinfo else rec.timestamp.replace(tzinfo=timezone.utc)) + offset
         reason = check_record(rec, target.name, ts, now)
         if reason:
             rejected.append(IngestRejected(index=i, reason=reason))
             continue
+        owner = target
+        if rec.target:
+            owner = children.get(_child_id(rec))
+            if owner is None:
+                rejected.append(IngestRejected(index=i, reason="невідомий дочірній об'єкт сервера"))
+                continue
+            if owner.hidden:
+                continue  # прихований контейнер не моніториться: запис мовчки пропускаємо
         series = (rec.metric, rec.instance)
-        if series not in known and len(known) >= settings.max_series_per_target:
+        seen = known.setdefault(owner.id, await _known_series(db, owner.id))
+        if series not in seen and len(seen) >= settings.max_series_per_target:
             rejected.append(IngestRejected(index=i, reason=f"забагато різних рядів (ліміт {settings.max_series_per_target})"))
             continue
-        known.add(series)
-        rows.append({"target_id": target.id, "name": rec.metric, "instance": rec.instance, "value": rec.value, "ts": ts})
+        seen.add(series)
+        rows.append({"target_id": owner.id, "name": rec.metric, "instance": rec.instance, "value": rec.value, "ts": ts})
         if ts >= fresh_after:  # пізні записи з буфера лише зберігаються, інцидентів заднім числом не відкривають
-            fresh.append(pipeline.Point(rec.metric, rec.instance, ts, rec.value))
+            fresh.setdefault(owner.id, []).append(pipeline.Point(rec.metric, rec.instance, ts, rec.value))
+            owners[owner.id] = owner
     accepted = len(rows)
-    alive = {"target_id": target.id, "name": "agent_alive", "instance": "", "value": 1.0, "ts": now}
-    rows.append(alive)  # будь-який пакет від агента – доказ, що він живий; закриває інцидент agent_alive = 0
-    fresh.append(pipeline.Point("agent_alive", "", now, 1.0))
+    rows.append({"target_id": target.id, "name": "agent_alive", "instance": "", "value": 1.0, "ts": now})  # доказ, що агент живий
+    fresh[target.id].append(pipeline.Point("agent_alive", "", now, 1.0))
     await metrics_repo.insert_many(db, rows)
     target.last_seen = now
     target.agent_version = agent_version
     target.clock_offset_s = offset.total_seconds() if agent_time else None
-    await pipeline.process(db, target, fresh)
+    await pipeline.process(db, target, fresh[target.id])
+    for tid, points in fresh.items():
+        if tid != target.id:
+            owners[tid].last_seen = now
+            await pipeline.process(db, owners[tid], points)
     if rejected:
         log.warning("відкинуто записи", extra={"target_id": target.id, "rejected": len(rejected)})
     return IngestOut(accepted=accepted, rejected=rejected)

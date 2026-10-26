@@ -48,6 +48,7 @@ class Target(Base):
     status: Mapped[str] = mapped_column(Text, default="unknown", server_default="unknown")
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))  # прихований виявлений об'єкт
     ping_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))  # лише сервери з публічною адресою
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

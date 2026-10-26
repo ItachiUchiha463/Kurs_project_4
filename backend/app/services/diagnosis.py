@@ -5,6 +5,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine import inference
+from app.engine.thresholds import AGG_SQL
 from app.engine.inference import Condition
 from app.models import Diagnosis, Incident, Rule, Target
 
@@ -33,7 +34,7 @@ async def _fact(db: AsyncSession, target_id: int, c: Condition, incident_instanc
                   ORDER BY instance, ts DESC) x"""
     else:
         params["since"] = ref - timedelta(seconds=c.window_s)
-        sql = f"""SELECT {c.agg}(value) FROM metrics
+        sql = f"""SELECT {AGG_SQL[c.agg]} FROM metrics
                   WHERE target_id = :t AND name = :n {where_inst} AND ts <= :ref AND ts > :since"""
     return (await db.execute(text(sql), params)).scalar()
 
