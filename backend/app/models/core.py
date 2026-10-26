@@ -143,6 +143,28 @@ class Diagnosis(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ThresholdRow(Base):
+    """Власний поріг користувача: для одного об'єкта або (target_id = NULL) для всіх його об'єктів."""
+    __tablename__ = "thresholds"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    target_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("targets.id", ondelete="CASCADE"))
+    metric: Mapped[str] = mapped_column(Text)
+    warn_value: Mapped[float | None] = mapped_column(Float)
+    crit_value: Mapped[float | None] = mapped_column(Float)
+    duration_s: Mapped[int] = mapped_column(Integer)
+    __table_args__ = (Index("uq_thresholds_scope", "owner_id", "target_id", "metric", unique=True, postgresql_nulls_not_distinct=True),
+                      CheckConstraint("duration_s >= 0 AND duration_s <= 3600"))
+
+
+class RuleOverride(Base):
+    """Базове правило, вимкнене (або знову увімкнене) окремим користувачем."""
+    __tablename__ = "rule_overrides"
+    owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    rule_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("rules.id", ondelete="CASCADE"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

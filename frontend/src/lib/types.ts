@@ -109,3 +109,15 @@ export interface Report {
   rows: ReportRow[]
   top_causes: { cause: string; count: number }[]
 }
+
+export interface ThresholdItem {
+  metric: string
+  agg: string
+  window_s: number
+  warn: number | null
+  crit: number | null
+  direction: 'above' | 'below' | 'equals'
+  duration_s: number
+  source: 'default' | 'template' | 'target'
+  levels_editable: boolean
+}

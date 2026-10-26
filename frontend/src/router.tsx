@@ -21,6 +21,7 @@ export const router = createBrowserRouter([
       { path: '/incidents', element: <IncidentsPage /> },
       { path: '/incidents/:id', lazy: async () => ({ Component: (await import('@/pages/Incident')).IncidentPage }) },
       { path: '/reports', lazy: async () => ({ Component: (await import('@/pages/Reports')).ReportsPage }) },
+      { path: '/settings', lazy: async () => ({ Component: (await import('@/pages/Settings')).SettingsPage }) },
       { path: '/profile', element: <ProfilePage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

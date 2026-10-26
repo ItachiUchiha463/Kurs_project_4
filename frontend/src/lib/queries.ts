@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
 import { getToken } from '@/lib/auth'
-import type { Incident, IncidentDetail, Me, Point, Report, Target } from '@/lib/types'
+import type { Incident, IncidentDetail, Me, Point, Report, Target, ThresholdItem } from '@/lib/types'
 
 export type Range = '1h' | '24h' | '7d' | '30d'
 export const RANGE_MINUTES: Record<Range, number> = { '1h': 60, '24h': 1440, '7d': 10_080, '30d': 43_200 }
@@ -52,3 +52,11 @@ export const reportParams = (range: ReportRange) => {
 
 export const useReport = (range: ReportRange) =>
   useQuery({ queryKey: ['report', range], queryFn: () => api<Report>('/reports', { params: reportParams(range) }), staleTime: 60_000 })
+
+/** Чинні пороги: для об'єкта (з його власними й шаблонними налаштуваннями) або шаблонні, якщо targetId не задано. */
+export const useThresholds = (targetId?: number) =>
+  useQuery({
+    queryKey: ['thresholds', targetId ?? 'all'],
+    queryFn: () => api<ThresholdItem[]>('/thresholds', { params: { target_id: targetId } }),
+    staleTime: 60_000,
+  })

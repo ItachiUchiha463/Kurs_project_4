@@ -6,13 +6,13 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS, SERVER_AVAILABILITY
+from app.engine.defaults import AVAILABILITY_METRICS, SERVER_AVAILABILITY
 from app.engine.thresholds import AGG_SQL, Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
 from app.notify import outbox
 from app.realtime.hub import publish_after_commit
-from app.services import diagnosis, events
+from app.services import diagnosis, events, thresholds
 
 log = logging.getLogger("vigil.pipeline")
 
@@ -168,7 +168,7 @@ async def process(db: AsyncSession, target: Target, points: list[Point], server_
         latest[(p.metric, p.instance)] = p
     changes: list[Change] = []
     for (metric, instance), p in latest.items():
-        th = DEFAULT_THRESHOLDS.get(metric)
+        th = await thresholds.resolve(db, target, metric)
         if th is None:
             continue
         key = (target.id, metric, instance)

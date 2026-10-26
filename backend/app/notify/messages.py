@@ -36,10 +36,12 @@ def describe(metric: str, instance: str, value: float) -> str:
     return f"{METRIC_LABELS.get(metric, metric)}{inst} {num(value)}{' ' + unit if unit else ''}"
 
 
-def threshold_text(metric: str, severity: str) -> str:
+def threshold_text(metric: str, severity: str, limit: float | None = None) -> str:
+    """limit – чинний поріг (з урахуванням налаштувань користувача); без нього береться типовий."""
     th = DEFAULT_THRESHOLDS.get(metric)
-    limit = th and (th.crit if severity == "critical" else th.warn)
-    if limit is None or th.direction == "equals":
+    if limit is None and th:
+        limit = th.crit if severity == "critical" else th.warn
+    if limit is None or th is None or th.direction == "equals":
         return ""
     unit = UNITS.get(metric, "")
     return f" (поріг {num(limit)}{' ' + unit if unit else ''})"
@@ -50,7 +52,7 @@ def local_time(ts: datetime) -> str:
 
 
 def render(kind: str, *, target: str = "", metric: str = "", instance: str = "", severity: str = "critical", value: float = 0.0,
-           ts: datetime | None = None, cause: str | None = None, minutes: int | None = None, dependents: int = 0, url: str = "") -> str:
+           ts: datetime | None = None, cause: str | None = None, minutes: int | None = None, dependents: int = 0, url: str = "", limit: float | None = None) -> str:
     name = escape(target)
     if kind == "reset":
         return f"🔑 <b>Vigil</b>: скидання пароля. Перейдіть за посиланням (діє 30 хвилин): {url}\nЯкщо це були не ви, проігноруйте повідомлення."
@@ -61,7 +63,7 @@ def render(kind: str, *, target: str = "", metric: str = "", instance: str = "",
         return text + (f" · тривало {minutes} хв" if minutes is not None else "")
     title = TITLE[severity] + (" (підвищено)" if kind == "escalated" else "")
     text = (f"{ICON[severity]} <b>{title}</b> · {name} · {escape(describe(metric, instance, value))}"
-            f"{threshold_text(metric, severity)} · {local_time(ts) if ts else ''}")
+            f"{threshold_text(metric, severity, limit)} · {local_time(ts) if ts else ''}")
     if dependents:
         text += f"\nЗалежних об’єктів: {dependents}"
     if cause:

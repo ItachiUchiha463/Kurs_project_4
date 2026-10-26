@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import { Skeleton } from '@/components/ui/skeleton'
 import { dateTime, num, time } from '@/lib/format'
 import { METRICS, metricLabel, metricUnit } from '@/lib/metrics'
-import { useSeries, type Range } from '@/lib/queries'
+import { useSeries, useThresholds, type Range } from '@/lib/queries'
 
 interface Props {
   targetId: number
@@ -16,7 +16,8 @@ interface Props {
 /** Графік з пунктирними лініями порогів і текстовим підсумком під ним (доступність: графік сам по собі нічого не озвучує). */
 export function MetricChart({ targetId, metric, instance = '', range, title }: Props) {
   const { data, isPending, isError } = useSeries(targetId, metric, instance, range)
-  const meta = METRICS[metric]
+  const eff = useThresholds(targetId).data?.find((t) => t.metric === metric)
+  const meta = METRICS[metric] && { ...METRICS[metric], ...(eff && eff.direction !== 'equals' ? { warn: eff.warn ?? undefined, crit: eff.crit ?? undefined } : {}) }
   const unit = metricUnit(metric)
   const label = title ?? metricLabel(metric, instance)
   const fmt = range === '7d' || range === '30d' ? dateTime : time  // на довгих періодах одного часу замало: потрібна й дата

@@ -52,6 +52,8 @@ async def _clean(_database):
     for limiter in (auth_api.register_limiter, auth_api.login_limiter, auth_api.reset_limiter, auth_service.login_failures, auth_service.forgot_limiter):
         limiter.reset()
     ingest._series_seen.clear()
+    from app.services import thresholds
+    thresholds._cache.clear()  # ідентифікатори користувачів після TRUNCATE починаються знову з 1
     yield
 
 

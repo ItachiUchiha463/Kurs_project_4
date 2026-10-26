@@ -14,6 +14,7 @@ from app.models import Diagnosis, Incident, Notification, Rule, Target, User
 from app.notify import messages, telegram
 from app.notify.policy import should_notify
 from app.repositories import incidents as incidents_repo
+from app.services import thresholds
 
 if TYPE_CHECKING:  # pipeline сам викликає enqueue, тому тут лише для типів
     from app.services.pipeline import Change
@@ -66,9 +67,12 @@ async def _render(db: AsyncSession, n: Notification) -> tuple[str, dict | None, 
         return text, None, reply_to
     row = (await db.execute(select(Rule.cause).join(Diagnosis, Diagnosis.rule_id == Rule.id)
                             .where(Diagnosis.incident_id == inc.id))).first()
+    th = await thresholds.resolve(db, target, inc.metric)
+    limit = th and (th.crit if inc.severity == "critical" else th.warn)
     dependents = (await incidents_repo.suppressed_counts(db, [inc.id])).get(inc.id, 0) if n.kind == "opened" else 0
     text = messages.render(n.kind, target=target.name, metric=inc.metric, instance=inc.instance, severity=inc.severity,
-                           value=value, ts=last.ts if last else inc.started_at, cause=row[0] if row else None, dependents=dependents)
+                           value=value, ts=last.ts if last else inc.started_at, cause=row[0] if row else None, dependents=dependents,
+                           limit=limit)
     return text, telegram.incident_keyboard(inc.id), None
 
 
