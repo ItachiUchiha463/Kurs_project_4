@@ -11,6 +11,8 @@ OWNED = [
     ("DELETE", "/api/targets/{target_id}", None),
     ("POST", "/api/targets/{target_id}/agent-token", None),
     ("GET", "/api/targets/{target_id}/metrics?name=cpu_usage", None),
+    ("GET", "/api/targets/{target_id}/children", None),
+    ("PUT", "/api/targets/{target_id}/hidden", {"hidden": True}),
     ("GET", "/api/incidents/{incident_id}", None),
     ("POST", "/api/incidents/{incident_id}/acknowledge", None),
     ("POST", "/api/incidents/{incident_id}/resolve", {"comment": "x"}),

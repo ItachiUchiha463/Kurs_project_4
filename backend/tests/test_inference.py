@@ -14,7 +14,7 @@ SLOW = Condition("self", "response_ms", ">", 1000, "avg", 300)
 
 
 def facts(**kw):
-    return {("host", "cpu_usage", "avg", 300, None): kw.get("cpu"), ("self", "response_ms", "avg", 300, None): kw.get("rt")}
+    return {("host", "cpu_usage", "avg", 300, None, None): kw.get("cpu"), ("self", "response_ms", "avg", 300, None, None): kw.get("rt")}
 
 
 def test_full_match_has_evidence_with_actual_values():
@@ -78,3 +78,16 @@ def test_base_rules_are_well_formed():
         names.add(r.name)
         for c in r.conditions:
             assert c.op in ("<", ">", "<=", ">=", "==") and isinstance(c.value, (int, float))
+
+
+def test_siblings_conditions_any_and_all():
+    def rule(match):
+        return Rule(1, "R", "причина", "", ("database",),
+                    (Condition("siblings", "container_running", "==", 0, sibling_type="container", match=match),))
+    key = ("siblings", "container_running", "last", 0, None, "container")
+    names = {"self": "db", "host": "web-01", "siblings": "на сервері"}
+    assert evaluate(rule("any"), {key: [1.0, 0.0]}, names).ratio == 1.0   # хоч один контейнер зупинено
+    assert evaluate(rule("all"), {key: [1.0, 0.0]}, names).ratio == 0.0   # не всі
+    assert evaluate(rule("all"), {key: [0.0, 0.0]}, names).ratio == 1.0
+    no_data = evaluate(rule("any"), {key: []}, names)
+    assert no_data.ratio == 0.0 and no_data.evidence[0].value == "немає даних"

@@ -5,7 +5,7 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
-Scope = Literal["self", "host"]
+Scope = Literal["self", "host", "siblings"]  # siblings – інші об'єкти того самого сервера
 OPS = {
     ">": lambda a, b: a > b, ">=": lambda a, b: a >= b, "<": lambda a, b: a < b,
     "<=": lambda a, b: a <= b, "==": lambda a, b: a == b,
@@ -33,10 +33,12 @@ class Condition:
     agg: str = "last"
     window_s: int = 0
     instance: str | None = None  # None – ряд без instance; "any" – найгірший серед рядів; "same" – як в інциденті
+    sibling_type: str | None = None  # для siblings: тип сусідів (container, database, service)
+    match: str = "any"  # для siblings: умова має виконуватися хоча б для одного (any) чи для всіх (all)
 
     @property
     def fact_key(self) -> tuple:
-        return (self.scope, self.metric, self.agg, self.window_s, self.instance)
+        return (self.scope, self.metric, self.agg, self.window_s, self.instance, self.sibling_type)
 
 
 @dataclass(frozen=True)
@@ -76,19 +78,28 @@ def _num(v: float) -> str:
 
 
 def _describe(c: Condition, names: dict[str, str]) -> str:
-    who = names[c.scope]
+    who = names[c.scope] + (f" ({c.sibling_type})" if c.scope == "siblings" else "")
     label = METRIC_LABELS.get(c.metric, c.metric)
     window = f", {AGG_TEXT[c.agg]} за {c.window_s // 60} хв" if c.agg != "last" and c.window_s else ""
     return f"{label} {who}{window}"
 
 
-def evaluate(rule: Rule, facts: dict[tuple, float | None], names: dict[str, str]) -> Match:
+def evaluate(rule: Rule, facts: dict[tuple, float | list[float] | None], names: dict[str, str]) -> Match:
     evidence, ok_count = [], 0
     for c in rule.conditions:
         actual = facts.get(c.fact_key)
         unit = f" {UNITS[c.metric]}" if c.metric in UNITS else ""
-        if actual is None:
+        if actual is None or actual == []:
             evidence.append(Evidence(False, _describe(c, names), "немає даних"))
+            continue
+        if isinstance(actual, list):  # siblings: значення кожного сусіда
+            hits = [OPS[c.op](v, c.value) for v in actual]
+            ok = all(hits) if c.match == "all" else any(hits)
+            # показуємо найвідповідніше значення: те, що виконує умову, а інакше найближче до неї
+            pick = [v for v, h in zip(actual, hits) if h] or actual
+            actual = max(pick) if c.op in (">", ">=") else min(pick) if c.op in ("<", "<=") else pick[0]
+            ok_count += ok
+            evidence.append(Evidence(ok, _describe(c, names), f"{_num(actual)}{unit} {c.op} {_num(c.value)}{unit}"))
             continue
         ok = OPS[c.op](actual, c.value)
         ok_count += ok
@@ -96,7 +107,7 @@ def evaluate(rule: Rule, facts: dict[tuple, float | None], names: dict[str, str]
     return Match(rule, ok_count / len(rule.conditions) if rule.conditions else 0.0, evidence)
 
 
-def diagnose(rules: list[Rule], facts: dict[tuple, float | None], names: dict[str, str], target_type: str) -> Diagnosis:
+def diagnose(rules: list[Rule], facts: dict[tuple, float | list[float] | None], names: dict[str, str], target_type: str) -> Diagnosis:
     """Правило з усіма виконаними умовами – причина; конкретніше (більше умов) вище, далі власні, далі priority."""
     matches = [evaluate(r, facts, names) for r in rules if target_type in r.applies_to]
     full = sorted((m for m in matches if m.ratio == 1.0),

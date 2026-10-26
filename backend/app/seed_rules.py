@@ -1,11 +1,12 @@
-"""Базові правила (ТЗ 8.3): 1–6, 8–15 та запасні варіанти 5 і 8 без ping (сервер у закритій мережі).
+"""Базові правила (ТЗ 8.3): 1–6, 8–18, 20, 22, 23 та запасні варіанти 5 і 8 без ping (сервер у закритій мережі).
 
 Перша умова кожного правила – симптом об'єкта (`self`), для якого є типовий поріг (ТЗ 7.3, «правило повноти»).
 """
 
 
-def c(scope, metric, op, value, agg="last", window_s=0, instance=None):
-    return {"scope": scope, "metric": metric, "op": op, "value": value, "agg": agg, "window_s": window_s, "instance": instance}
+def c(scope, metric, op, value, agg="last", window_s=0, instance=None, sibling_type=None, match="any"):
+    return {"scope": scope, "metric": metric, "op": op, "value": value, "agg": agg, "window_s": window_s, "instance": instance,
+            "sibling_type": sibling_type, "match": match}
 
 
 BASE_RULES = [
@@ -70,6 +71,31 @@ BASE_RULES = [
      "conditions": [c("self", "container_health", "==", 0), c("self", "container_running", "==", 1)],
      "cause": "Контейнер працює, але не проходить healthcheck",
      "recommendation": "Перевірте залежності застосунку (БД, зовнішні API)."},
+    {"name": "Вичерпано пул з'єднань БД", "applies_to": ["database"], "priority": 10,
+     "conditions": [c("self", "db_connections_pct", ">", 90), c("self", "db_idle_in_tx", ">", 10)],
+     "cause": "Вичерпано пул з'єднань через незакриті транзакції",
+     "recommendation": "Знайдіть сесії idle in transaction, перевірте закриття транзакцій у коді, налаштуйте пул з'єднань."},
+    {"name": "Довгий запит блокує інші", "applies_to": ["database"], "priority": 10,
+     "conditions": [c("self", "db_longest_query_s", ">", 60), c("self", "db_locks_waiting", ">", 0)],
+     "cause": "Довгий запит блокує інші",
+     "recommendation": "Знайдіть запит у pg_stat_activity і за потреби скасуйте його через pg_cancel_backend."},
+    {"name": "БД не вистачає пам'яті для кешу", "applies_to": ["database"], "priority": 10,
+     "conditions": [c("self", "db_cache_hit_pct", "<", 90, "avg", 900), c("host", "ram_usage", ">", 85, "avg", 900)],
+     "cause": "БД не вистачає пам'яті для кешу",
+     "recommendation": "Збільште shared_buffers або обсяг RAM сервера."},
+    {"name": "Повільна відповідь через повільні запити до БД", "applies_to": ["service"], "priority": 10,
+     "conditions": [c("self", "response_ms", ">", 1000, "avg", 300), c("siblings", "db_longest_query_s", ">", 5, sibling_type="database")],
+     "cause": "Повільна відповідь через повільні запити до БД",
+     "recommendation": "Проаналізуйте повільні запити (pg_stat_statements) і додайте індекси."},
+    {"name": "БД недоступна: зупинився її контейнер", "applies_to": ["database"], "priority": 10,
+     "conditions": [c("self", "db_up", "==", 0), c("siblings", "container_running", "==", 0, sibling_type="container")],
+     "cause": "БД недоступна, імовірно, бо зупинився її контейнер",
+     "recommendation": "Запустіть контейнер і з'ясуйте причину зупинки (див. правила про контейнери)."},
+    {"name": "Сервер працює, але не відповідає жоден його сервіс", "applies_to": ["service"], "priority": 10,
+     "conditions": [c("self", "available", "==", 0), c("host", "agent_alive", "==", 1),
+                    c("siblings", "available", "==", 0, sibling_type="service", match="all")],
+     "cause": "Сервер працює, але не відповідає жоден його сервіс – імовірно, мережевий фільтр (firewall) чи вебсервер",
+     "recommendation": "Перевірте правила firewall / NSG і стан вебсервера."},
     {"name": "Агент або сервер недоступні", "applies_to": ["server"], "priority": 5,
      "conditions": [c("self", "agent_alive", "==", 0)],
      "cause": "Сервер вимкнений, недоступний мережею або зупинено агента",

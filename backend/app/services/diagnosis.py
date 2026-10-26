@@ -39,6 +39,17 @@ async def _fact(db: AsyncSession, target_id: int, c: Condition, incident_instanc
     return (await db.execute(text(sql), params)).scalar()
 
 
+async def _sibling_values(db: AsyncSession, target: Target, c: Condition, incident_instance: str, ref: datetime) -> list[float]:
+    """Значення метрики в усіх сусідніх об'єктів одного сервера (без самого об'єкта)."""
+    if target.host_id is None:
+        return []
+    ids = await db.scalars(select(Target.id).where(
+        Target.host_id == target.host_id, Target.owner_id == target.owner_id, Target.type == c.sibling_type,
+        Target.id != target.id, Target.hidden.is_(False)))
+    values = [await _fact(db, tid, c, incident_instance, ref) for tid in ids]
+    return [v for v in values if v is not None]
+
+
 async def host_of(db: AsyncSession, target: Target) -> Target | None:
     if target.type == "server":
         return target
@@ -57,9 +68,12 @@ async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target
         for c in rule.conditions:
             if c.fact_key in facts:
                 continue
+            if c.scope == "siblings":
+                facts[c.fact_key] = await _sibling_values(db, target, c, incident.instance, ref)
+                continue
             subject = subjects[c.scope]
             facts[c.fact_key] = await _fact(db, subject.id, c, incident.instance, ref) if subject else None
-    names = {"self": target.name, "host": host.name if host else "–"}
+    names = {"self": target.name, "host": host.name if host else "–", "siblings": "на тому ж сервері"}
     result = inference.diagnose(rules, facts, names, target.type)
 
     primary = result.primary

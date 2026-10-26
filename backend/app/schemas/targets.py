@@ -84,9 +84,17 @@ class ContainerInfo(BaseModel):
     state: str = Field(default="", max_length=30)
 
 
+class DatabaseInfo(BaseModel):
+    """База даних із agent.toml (ТЗ 5.4); id – ім'я з конфігурації, за ним агент позначає записи («postgres:<id>»)."""
+    id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=100)
+    engine: Literal["postgres"] = "postgres"
+
+
 class IngestBatch(BaseModel):
     records: list[IngestRecord]
     containers: list[ContainerInfo] = []
+    databases: list[DatabaseInfo] = []
 
 
 class IngestRejected(BaseModel):

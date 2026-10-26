@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 import httpx
 
 from collectors.docker import DockerCollector, client_for
+from collectors.postgres import PostgresCollector
 from collectors.system import SystemCollector
 
 VERSION = "0.2.0"
@@ -29,7 +30,7 @@ class Sender:
 
     def __init__(self, client: httpx.Client, server: str, token: str, interval: int = 15):
         self.client, self.url = client, server.rstrip("/") + "/api/ingest"
-        self.containers: list[dict] | None = None  # знімок списку контейнерів: лише останній, у чергу не потрапляє
+        self.discovered: dict[str, list[dict]] = {}  # знімок «containers» / «databases»: лише останній, у чергу не потрапляє
         self.headers = {"Authorization": f"Bearer {token}", "X-Agent-Version": VERSION, "X-Agent-Interval": str(interval)}
         self.queue: deque[list[dict]] = deque(maxlen=MAX_BUFFERED)
 
@@ -43,13 +44,13 @@ class Sender:
             count += 1
         return count, records
 
-    def send(self, batch: list[dict], containers: list[dict] | None = None) -> int | None:
+    def send(self, batch: list[dict], discovered: dict[str, list[dict]] | None = None) -> int | None:
         """Один запит за цикл. Повертає HTTP-код відповіді, None – якщо зв'язку немає. 401 зупиняє надсилання."""
         self.queue.append(batch)
-        self.containers = containers
+        self.discovered = discovered or {}
         count, records = self._next_request()
         try:
-            payload = records if self.containers is None else {"records": records, "containers": self.containers}
+            payload = {"records": records, **self.discovered} if self.discovered else records
             r = self.client.post(self.url, json=payload, headers={**self.headers, "X-Agent-Time": now_iso()})
         except httpx.HTTPError as e:
             log.warning("немає зв'язку з сервісом: %s (у черзі %d)", e, len(self.queue))
@@ -66,10 +67,13 @@ class Sender:
         return r.status_code
 
 
-def make_batch(host: str, samples: list[tuple[str, str, float]], docker_samples: list[tuple[str, str, float]] = ()) -> list[dict]:
+def make_batch(host: str, samples: list[tuple[str, str, float]], docker_samples: list[tuple[str, str, float]] = (),
+               db_samples: list[tuple[str, str, str, float]] = ()) -> list[dict]:
     ts = now_iso()
     own = [{"host": host, "metric": m, "instance": inst, "value": v, "timestamp": ts} for m, inst, v in samples]
-    return own + [{"host": host, "target": f"docker:{cid}", "metric": m, "value": v, "timestamp": ts} for cid, m, v in docker_samples]
+    own += [{"host": host, "target": f"docker:{cid}", "metric": m, "value": v, "timestamp": ts} for cid, m, v in docker_samples]
+    return own + [{"host": host, "target": f"postgres:{name}", "metric": m, "instance": inst, "value": v, "timestamp": ts}
+                  for name, m, inst, v in db_samples]
 
 
 def setup_logging(path: str) -> None:
@@ -89,19 +93,24 @@ def main() -> None:
     setup_logging(args.log)
     interval = max(int(cfg.get("interval", 15)), 15)
     collector = SystemCollector(cfg.get("disks"))
+    dbs = {d["name"]: PostgresCollector(d["dsn"]) for d in cfg.get("databases", []) if d.get("type", "postgres") == "postgres"}
     docker = DockerCollector(client_for(cfg.get("docker_url", "tcp://127.0.0.1:2375")), cfg.get("docker_ignore")) if cfg.get("docker") else None
     with httpx.Client(timeout=10) as client:
         sender = Sender(client, cfg["server"], cfg["token"], interval)
         log.info("агент %s запущено, інтервал %d с", VERSION, interval)
         while True:
             time.sleep(interval)
-            containers, docker_samples = None, []
+            discovered, docker_samples = {}, []
             if docker:
                 try:
                     containers, docker_samples = docker.collect()
+                    discovered["containers"] = containers
                 except (httpx.HTTPError, ValueError) as e:  # Docker недоступний: система й надалі збирається
                     log.warning("Docker недоступний: %s", type(e).__name__)
-            status = sender.send(make_batch(cfg["host"], collector.collect(), docker_samples), containers)
+            db_samples = [(name, m, inst, v) for name, c in dbs.items() for m, inst, v in c.collect()]
+            if dbs:
+                discovered["databases"] = [{"id": name, "name": name, "engine": "postgres"} for name in dbs]
+            status = sender.send(make_batch(cfg["host"], collector.collect(), docker_samples, db_samples), discovered)
             if status == 401:
                 time.sleep(UNAUTHORIZED_PAUSE_S)
 

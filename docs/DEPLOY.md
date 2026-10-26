@@ -109,3 +109,23 @@ docker run -d --name vigil-docker-proxy --restart unless-stopped \
 Порт опублікований лише на `127.0.0.1`, назовні він не відкривається. У `agent.toml` додайте `docker = true` (адреса за замовчуванням `tcp://127.0.0.1:2375`) і перезапустіть агента. Контейнери з'являться як дочірні об'єкти сервера. Щоб виключити контейнер, додайте йому мітку `vigil.ignore=true` або маску імені в `docker_ignore`.
 
 Docker Desktop на Windows віддає API через іменований канал (`npipe`), який агент не підтримує: у налаштуваннях Docker Desktop ввімкніть «Expose daemon on tcp://localhost:2375 without TLS» (лише для особистого ПК) і вкажіть `docker_url = "tcp://localhost:2375"`.
+
+## 6. Моніторинг PostgreSQL
+
+Базу моніторить агент на тій самій машині або в тій самій мережі. Логін і пароль лежать лише в `agent.toml` і на сервер Vigil не передаються. Створіть окремого користувача лише з правом читати статистику:
+
+```sql
+CREATE USER vigil_monitor WITH PASSWORD '...';
+GRANT pg_monitor TO vigil_monitor;
+```
+
+У `agent.toml` додайте блок (і встановіть драйвер: `.venv/bin/pip install "psycopg[binary]"`):
+
+```toml
+[[databases]]
+name = "orders-db"
+type = "postgres"
+dsn  = "postgresql://vigil_monitor:***@localhost:5432/orders"
+```
+
+База з'явиться дочірнім об'єктом сервера. Запити до неї мають таймаут 5 с; якщо база не відповідає, агент надсилає лише `db_up = 0`.

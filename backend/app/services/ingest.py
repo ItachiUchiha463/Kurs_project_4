@@ -11,7 +11,7 @@ from app.metric_catalog import AGENT_METRICS, PERCENT_METRICS
 from app.repositories import metrics as metrics_repo
 from app.repositories import targets as targets_repo
 from app.models import Target
-from app.schemas.targets import ContainerInfo, IngestBatch, IngestOut, IngestRecord, IngestRejected
+from app.schemas.targets import ContainerInfo, DatabaseInfo, IngestBatch, IngestOut, IngestRecord, IngestRejected
 from app.security import hash_token
 from app.services import pipeline
 
@@ -65,31 +65,32 @@ def clock_offset(agent_time: datetime | None, now: datetime) -> timedelta:
     return now - agent_time if agent_time else timedelta(0)
 
 
-async def sync_containers(db: AsyncSession, server: Target, found: list[ContainerInfo], now: datetime) -> dict[str, Target]:
-    """Автовиявлення (ТЗ 5.3): новий контейнер стає дочірнім об'єктом сервера, а зниклий ховається через 24 год."""
+async def sync_containers(db: AsyncSession, server: Target, found: list[ContainerInfo], now: datetime,
+                          databases: list[DatabaseInfo] = ()) -> dict[str, Target]:
+    """Автовиявлення (ТЗ 5.3, 5.4): новий контейнер чи БД стає дочірнім об'єктом сервера, а зниклий ховається через 24 год.
+
+    Ключ словника – те саме «docker:<id>» / «postgres:<id>», що агент пише в поле target записів.
+    """
     children = {c.external_id: c for c in await db.scalars(
-        select(Target).where(Target.host_id == server.id, Target.check_type == "docker"))}
+        select(Target).where(Target.host_id == server.id, Target.source == "discovered"))}
+    wanted = [(f"docker:{i.id}", "container", "docker", i.name, i.image) for i in found[:MAX_CONTAINERS]]
+    wanted += [(f"{i.engine}:{i.id}", "database", i.engine, i.name, "PostgreSQL") for i in databases[:MAX_CONTAINERS]]
     seen = set()
-    for info in found[:MAX_CONTAINERS]:
-        seen.add(info.id)
-        child = children.get(info.id)
+    for key, kind, check_type, name, address in wanted:
+        seen.add(key)
+        child = children.get(key)
         if child is None:
-            child = Target(owner_id=server.owner_id, name=info.name, type="container", check_type="docker", source="discovered",
-                           host_id=server.id, external_id=info.id, address=info.image, interval_s=server.interval_s)
+            child = Target(owner_id=server.owner_id, name=name, type=kind, check_type=check_type, source="discovered",
+                           host_id=server.id, external_id=key, address=address, interval_s=server.interval_s)
             db.add(child)
-            children[info.id] = child
+            children[key] = child
         else:
-            child.name, child.address = info.name, info.image
-    for ext_id, child in children.items():
-        if ext_id not in seen and not child.hidden and (child.last_seen or child.created_at or now) < now - GONE_HIDE_AFTER:
+            child.name, child.address = name, address
+    for key, child in children.items():
+        if key not in seen and not child.hidden and (child.last_seen or child.created_at or now) < now - GONE_HIDE_AFTER:
             child.hidden = True
     await db.flush()
     return children
-
-
-def _child_id(rec: IngestRecord) -> str | None:
-    """«docker:<id>» -> id контейнера; None для записів самого сервера."""
-    return rec.target.partition(":")[2] if rec.target else None
 
 
 async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: datetime | None, agent_version: str | None,
@@ -111,7 +112,8 @@ async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: d
     if agent_interval:
         target.agent_interval_s = max(15, min(3600, agent_interval))
     fresh_after = now - timedelta(seconds=2 * target.effective_interval_s)
-    children = await sync_containers(db, target, batch.containers, now) if batch.containers or any(r.target for r in records) else {}
+    discovered = bool(batch.containers or batch.databases or any(r.target for r in records))
+    children = await sync_containers(db, target, batch.containers, now, batch.databases) if discovered else {}
     known: dict[int, set] = {}
     fresh: dict[int, list[pipeline.Point]] = {target.id: []}
     owners = {target.id: target}
@@ -123,7 +125,7 @@ async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: d
             continue
         owner = target
         if rec.target:
-            owner = children.get(_child_id(rec))
+            owner = children.get(rec.target)
             if owner is None:
                 rejected.append(IngestRejected(index=i, reason="невідомий дочірній об'єкт сервера"))
                 continue

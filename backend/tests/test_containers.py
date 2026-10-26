@@ -37,7 +37,7 @@ async def test_container_is_discovered_once_and_gets_its_metrics(client, user_fa
         assert out["accepted"] == 1 and out["rejected"] == []
     async with SessionLocal() as db:
         [child] = await children(db, srv["id"])
-        assert (child.type, child.name, child.source, child.check_type, child.external_id) == ("container", "web", "discovered", "docker", CID)
+        assert (child.type, child.name, child.source, child.check_type, child.external_id) == ("container", "web", "discovered", "docker", f"docker:{CID}")
         assert child.address == "nginx:1.27" and child.last_seen is not None
     got = (await client.get(f"/api/targets/{child.id}", headers=h)).json()
     assert got["latest"]["container_cpu"] == 12.5 and got["host_id"] == srv["id"]
@@ -96,7 +96,7 @@ async def test_deleting_server_removes_discovered_containers(client, user_factor
     await push_child(client, srv, "container_cpu", 1)
     assert (await client.delete(f"/api/targets/{srv['id']}", headers=h)).status_code == 204
     async with SessionLocal() as db:
-        assert await db.scalar(select(Target.id).where(Target.external_id == CID)) is None
+        assert await db.scalar(select(Target.id).where(Target.external_id == f"docker:{CID}")) is None
 
 
 async def test_stopped_container_opens_incident_with_diagnosis(client, user_factory):

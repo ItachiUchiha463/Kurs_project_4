@@ -54,7 +54,7 @@ export function TargetPage() {
     <>
       <Link to="/" className="text-sm font-medium text-primary hover:underline">← Дашборд</Link>
       <PageHead title={target.name}
-        subtitle={<>{target.type === 'server' ? 'Сервер' : target.type === 'container' ? `Контейнер · ${target.address}` : `Сервіс · ${target.address}`} · дані: {ago(target.last_seen)}{target.agent_version && ` · агент ${target.agent_version}`}</>}
+        subtitle={<>{target.type === 'server' ? 'Сервер' : target.type === 'container' ? `Контейнер · ${target.address}` : target.type === 'database' ? `База даних · ${target.address}` : `Сервіс · ${target.address}`} · дані: {ago(target.last_seen)}{target.agent_version && ` · агент ${target.agent_version}`}</>}
         actions={<>
           <StatusBadge status={target.status} />
           {target.type === 'server' && <Button variant="outline" size="sm" onClick={rotate}>Новий токен агента</Button>}
@@ -78,7 +78,7 @@ export function TargetPage() {
 
       {tab === 'charts' && (children.data ?? []).length > 0 && (
         <section aria-label="Контейнери" className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <h2 className="border-b p-4 font-semibold">Контейнери ({children.data!.filter((c) => !c.hidden).length})</h2>
+          <h2 className="border-b p-4 font-semibold">Контейнери і бази даних ({children.data!.filter((c) => !c.hidden).length})</h2>
           <ul>
             {children.data!.filter((c) => !c.hidden).map((c) => (
               <li key={c.id} className="border-b last:border-b-0">
@@ -89,6 +89,8 @@ export function TargetPage() {
                   <span className="num ml-auto text-sm text-muted-foreground">
                     {'container_cpu' in c.latest && `CPU ${Math.round(c.latest.container_cpu)} %`}
                     {'container_mem' in c.latest && ` · RAM ${Math.round(c.latest.container_mem)} %`}
+                    {'db_connections_pct' in c.latest && `З’єднання ${Math.round(c.latest.db_connections_pct)} %`}
+                    {'db_cache_hit_pct' in c.latest && ` · кеш ${Math.round(c.latest.db_cache_hit_pct)} %`}
                   </span>
                 </Link>
               </li>
@@ -116,6 +118,13 @@ export function TargetPage() {
                   <MetricChart targetId={id} metric="net_total" range={range} />
                   {'load_per_core' in target.latest && <MetricChart targetId={id} metric="load_per_core" range={range} />}
                   {target.ping_enabled && <MetricChart targetId={id} metric="ping_ms" range={range} />}
+                </>
+              ) : target.type === 'database' ? (
+                <>
+                  <MetricChart targetId={id} metric="db_connections_pct" range={range} />
+                  <MetricChart targetId={id} metric="db_cache_hit_pct" range={range} />
+                  <MetricChart targetId={id} metric="db_longest_query_s" range={range} />
+                  <MetricChart targetId={id} metric="db_tps" range={range} />
                 </>
               ) : target.type === 'container' ? (
                 <>

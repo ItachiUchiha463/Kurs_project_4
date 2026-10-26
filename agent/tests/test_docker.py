@@ -96,7 +96,7 @@ def test_sender_posts_object_with_containers_and_plain_list_without():
                "https://x.test", "vgl_t")
     batch = make_batch("web-01", [("cpu_usage", "", 5.0)], [("aaa", "container_cpu", 1.5)])
     assert batch[1]["target"] == "docker:aaa" and batch[1]["metric"] == "container_cpu"
-    s.send(batch, [{"id": "aaa", "name": "web", "image": "nginx", "state": "running"}])
+    s.send(batch, {"containers": [{"id": "aaa", "name": "web", "image": "nginx", "state": "running"}]})
     assert bodies[0]["containers"][0]["name"] == "web" and len(bodies[0]["records"]) == 2
     s.send(batch)  # без Docker – старий формат (список)
     assert isinstance(bodies[1], list)

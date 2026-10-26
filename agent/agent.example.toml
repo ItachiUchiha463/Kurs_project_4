@@ -6,3 +6,9 @@ disks    = []            # наприклад ["C:", "D:"]; порожньо –
 docker   = false         # true: моніторити Docker-контейнери цього сервера (лише читання, див. docs/DEPLOY.md)
 # docker_url    = "tcp://127.0.0.1:2375"   # docker-socket-proxy; або "unix:///var/run/docker.sock"
 # docker_ignore = ["test-*"]               # маски імен, які не моніторити; ще працює мітка vigil.ignore=true
+
+# Бази даних (лише PostgreSQL; потрібен pip install psycopg[binary]). Логін і пароль лишаються на цій машині.
+# [[databases]]
+# name = "orders-db"                      # як показувати в Vigil
+# type = "postgres"
+# dsn  = "postgresql://vigil_monitor:***@localhost:5432/orders"   # окремий користувач із роллю pg_monitor
