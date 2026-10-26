@@ -16,8 +16,9 @@ METRIC_LABELS = {
     "cpu_usage": "CPU", "ram_usage": "RAM", "swap_usage": "Swap", "disk_usage": "Диск",
     "load_per_core": "Навантаження на ядро", "response_ms": "Час відповіді", "available": "Доступність",
     "agent_alive": "Агент працює", "status_code": "HTTP-код", "net_total": "Мережа",
+    "ping_available": "Ping", "packet_loss": "Втрати пакетів",
 }
-UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с"}
+UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%"}
 AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум"}
 
 

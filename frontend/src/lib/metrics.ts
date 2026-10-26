@@ -23,6 +23,9 @@ export const METRICS: Record<string, MetricMeta> = {
   available: { label: 'Доступність', unit: '' },
   agent_alive: { label: 'Агент надсилає дані', unit: '' },
   status_code: { label: 'Код відповіді HTTP', unit: '' },
+  ping_available: { label: 'Ping сервера', unit: '' },
+  ping_ms: { label: 'Час відповіді на ping', unit: 'мс', warn: 1000, crit: 3000 },
+  packet_loss: { label: 'Втрати пакетів', unit: '%', warn: 10, crit: 50, max: 100 },
 }
 
 export const metricLabel = (metric: string, instance = '') =>

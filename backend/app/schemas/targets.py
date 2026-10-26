@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Literal
 
 import httpx
+from app.checks.net import split_host_port
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -12,14 +13,25 @@ class TargetCreate(BaseModel):
     interval_s: int = Field(default=30, ge=15, le=3600)
     expected_status: str = "200-399"
     host_id: int | None = None  # сервер, на якому працює сервіс (для правил із `host`)
+    check_type: Literal["http", "tcp", "ping"] = "http"  # лише для сервісу
+    ping_enabled: bool = False  # лише для сервера: планувальник пінгує його адресу
 
     @model_validator(mode="after")
-    def _address_for_service(self):
-        # сервер працює через агента й адреси не потребує; сервіс перевіряється за URL
-        if self.type == "service" and not (self.address and self.address.startswith(("http://", "https://"))):
-            raise ValueError("Для сервісу вкажіть адресу, що починається з http:// або https://")
-        if self.type == "service" and httpx.URL(self.address).userinfo:
-            raise ValueError("Адреса не повинна містити логін і пароль")
+    def _address(self):
+        # сервер працює через агента; адреса потрібна лише для ping. Сервіс перевіряється за адресою свого типу
+        if self.type == "server":
+            if self.ping_enabled and not self.address:
+                raise ValueError("Для ping вкажіть адресу сервера")
+            return self
+        if self.check_type == "http":
+            if not (self.address and self.address.startswith(("http://", "https://"))):
+                raise ValueError("Для сервісу вкажіть адресу, що починається з http:// або https://")
+            if httpx.URL(self.address).userinfo:
+                raise ValueError("Адреса не повинна містити логін і пароль")
+        elif self.check_type == "tcp":
+            split_host_port(self.address or "")
+        elif not self.address or "/" in self.address or ":" in self.address:
+            raise ValueError("Для ping вкажіть лише ім'я хоста або IP-адресу")
         return self
 
 
@@ -31,6 +43,7 @@ class TargetOut(BaseModel):
     check_type: str
     address: str | None
     host_id: int | None = None
+    ping_enabled: bool = False
     interval_s: int
     status: str
     last_seen: datetime | None

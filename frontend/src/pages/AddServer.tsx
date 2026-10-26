@@ -67,14 +67,19 @@ export function AddServerPage() {
   const [step, setStep] = useState(0)
   const [formError, setFormError] = useState<string | null>(null)
   const { register, handleSubmit, watch, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof targetSchema>>({
-    resolver: zodResolver(targetSchema), defaultValues: { type: 'server', name: '' },
+    resolver: zodResolver(targetSchema), defaultValues: { type: 'server', name: '', check_type: 'http', ping_enabled: false },
   })
   const type = watch('type')
+  const checkType = watch('check_type')
+  const pingEnabled = watch('ping_enabled')
 
   const submit = handleSubmit(async (v) => {
     setFormError(null)
     try {
-      const body = { name: v.name, type: v.type, address: v.type === 'service' ? v.address : undefined, host_id: v.host_id ? Number(v.host_id) : undefined }
+      const body = {
+        name: v.name, type: v.type, address: v.address || undefined, host_id: v.host_id ? Number(v.host_id) : undefined,
+        check_type: v.type === 'service' ? v.check_type : undefined, ping_enabled: v.type === 'server' && v.ping_enabled,
+      }
       const res = await api<TargetCreated>('/targets', { method: 'POST', body })
       qc.invalidateQueries({ queryKey: ['targets'] })
       setCreated(res)
@@ -95,7 +100,7 @@ export function AddServerPage() {
           {formError && <p role="alert" className="rounded-lg bg-crit-bg p-3 text-sm text-crit">{formError}</p>}
           <fieldset className="grid gap-2">
             <legend className="mb-1 text-sm font-medium">Що підключаємо</legend>
-            {([['server', 'Сервер', 'Встановлюється агент: CPU, RAM, диски, мережа'], ['service', 'Вебсервіс', 'Перевіряємо за адресою (HTTP) з нашого сервера']] as const).map(([v, l, h]) => (
+            {([['server', 'Сервер', 'Встановлюється агент: CPU, RAM, диски, мережа'], ['service', 'Сервіс', 'Перевіряємо за адресою з нашого сервера: HTTP, TCP-порт або ping']] as const).map(([v, l, h]) => (
               <label key={v} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-[:checked]:border-primary has-[:checked]:bg-accent">
                 <input type="radio" value={v} className="mt-1" {...register('type')} />
                 <span><b>{l}</b><br /><span className="text-sm text-muted-foreground">{h}</span></span>
@@ -105,10 +110,32 @@ export function AddServerPage() {
           <Field id="name" label="Назва" required error={errors.name?.message} hint="Як він відображатиметься на дашборді. Для сервера – та сама, що в agent.toml">
             {(p) => <Input placeholder={type === 'server' ? 'web-01' : 'shop.example.ua'} {...p} {...register('name')} />}
           </Field>
+          {type === 'server' && (
+            <>
+              <label className="flex items-start gap-3 text-sm">
+                <input type="checkbox" className="mt-1" {...register('ping_enabled')} />
+                <span><b>Перевіряти ping</b><br /><span className="text-muted-foreground">Лише для сервера з публічною адресою: відрізняє «сервер вимкнено» від «агент зупинено»</span></span>
+              </label>
+              {pingEnabled && (
+                <Field id="address" label="Публічна адреса сервера" required error={errors.address?.message} hint="Ім’я хоста або IP, наприклад web-01.example.ua">
+                  {(p) => <Input placeholder="web-01.example.ua" {...p} {...register('address')} />}
+                </Field>
+              )}
+            </>
+          )}
           {type === 'service' && (
             <>
+              <Field id="check_type" label="Тип перевірки">
+                {(p) => (
+                  <select className="h-9 rounded-md border bg-background px-3 text-sm" {...p} {...register('check_type')}>
+                    <option value="http">HTTP: сторінка відповідає</option>
+                    <option value="tcp">TCP: порт приймає з’єднання</option>
+                    <option value="ping">Ping: хост відповідає</option>
+                  </select>
+                )}
+              </Field>
               <Field id="address" label="Адреса" required error={errors.address?.message} hint="Публічна адреса: внутрішні (10.x, localhost) сервіс не перевіряє – для них потрібен агент">
-                {(p) => <Input inputMode="url" placeholder="https://shop.example.ua/health" {...p} {...register('address')} />}
+                {(p) => <Input inputMode="url" placeholder={checkType === 'http' ? 'https://shop.example.ua/health' : checkType === 'tcp' ? 'db.example.ua:5432' : 'gw.example.ua'} {...p} {...register('address')} />}
               </Field>
               <Field id="host_id" label="Працює на сервері" hint="Необов’язково. Дає змогу пов’язати збій сервісу зі станом сервера">
                 {(p) => (

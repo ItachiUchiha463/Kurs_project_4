@@ -84,9 +84,13 @@ export function TargetPage() {
                   {disks.map((d) => <MetricChart key={d} targetId={id} metric="disk_usage" instance={d} range={range} title={`Заповненість диска ${d}`} />)}
                   <MetricChart targetId={id} metric="net_total" range={range} />
                   {'load_per_core' in target.latest && <MetricChart targetId={id} metric="load_per_core" range={range} />}
+                  {target.ping_enabled && <MetricChart targetId={id} metric="ping_ms" range={range} />}
                 </>
               ) : (
-                <MetricChart targetId={id} metric="response_ms" range={range} />
+                <>
+                  <MetricChart targetId={id} metric="response_ms" range={range} />
+                  {target.check_type === 'ping' && <MetricChart targetId={id} metric="packet_loss" range={range} />}
+                </>
               )}
             </div>
           )}

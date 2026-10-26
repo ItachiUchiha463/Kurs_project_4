@@ -19,6 +19,7 @@ class CheckResult:
     response_ms: float | None = None
     status_code: int = 0
     error: str | None = None
+    packet_loss: float | None = None  # лише ping, %
 
 
 def status_ok(code: int, expected: str) -> bool:

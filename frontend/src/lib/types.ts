@@ -7,9 +7,10 @@ export interface Target {
   id: number
   name: string
   type: 'server' | 'service'
-  check_type: string
+  check_type: 'agent' | 'http' | 'tcp' | 'ping'
   address: string | null
   host_id: number | null
+  ping_enabled: boolean
   interval_s: number
   status: Status
   last_seen: string | null

@@ -4,6 +4,7 @@ import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.checks.net import split_host_port
 from app.config import settings
 from app.checks import ssrf
 from app.errors import NotFound, QuotaExceeded, Unprocessable
@@ -20,6 +21,16 @@ def _out(target: Target, latest: dict[str, float] | None = None) -> TargetOut:
     out = TargetOut.model_validate(target)
     out.latest = latest or {}
     return out
+
+
+def _probe_target(data: TargetCreate) -> tuple[str, int]:
+    """(хост, порт) для перевірки адреси на SSRF при створенні."""
+    if data.type == "server" or data.check_type == "ping":
+        return data.address.strip(), 0
+    if data.check_type == "tcp":
+        return split_host_port(data.address)
+    u = httpx.URL(data.address)
+    return u.host, u.port or (443 if u.scheme == "https" else 80)
 
 
 async def list_targets(db: AsyncSession, user: User) -> list[TargetOut]:
@@ -48,18 +59,21 @@ async def create_target(db: AsyncSession, user: User, data: TargetCreate) -> Tar
         host = await repo.get(db, user.id, data.host_id)
         if not host or host.type != "server":
             raise NotFound("Сервер для прив'язки не знайдено")
-    if data.type == "service":
-        u = httpx.URL(data.address)
+    if data.type == "service" or data.ping_enabled:
         try:
-            await address_resolver(u.host, u.port or (443 if u.scheme == "https" else 80))
+            await address_resolver(*_probe_target(data))
         except ssrf.BlockedAddress:
             raise Unprocessable("Адреса недоступна з інтернету – внутрішні сервіси підключайте через агента",
                                 details=[{"field": "address", "message": "Адреса недоступна з інтернету"}]) from None
     token = new_agent_token() if data.type == "server" else None
+    if data.type == "server":
+        check_type = "agent"
+    else:
+        check_type = data.check_type
     target = repo.add(
         db, user.id, name=data.name, type=data.type, address=data.address, interval_s=data.interval_s,
-        expected_status=data.expected_status, host_id=data.host_id if data.type == "service" else None, check_type="agent" if data.type == "server" else "http",
-        agent_token_hash=hash_token(token) if token else None)
+        expected_status=data.expected_status, host_id=data.host_id if data.type == "service" else None, check_type=check_type,
+        ping_enabled=data.ping_enabled and data.type == "server", agent_token_hash=hash_token(token) if token else None)
     await db.flush()
     return TargetCreated(**_out(target).model_dump(), agent_token=token)
 

@@ -193,7 +193,7 @@ users 1───* targets 1───* metrics            (гіпертаблиц
 | source | text CHECK (`manual`,`discovered`) | контейнери й БД агент знаходить сам |
 | host_id | bigint FK targets ON DELETE SET NULL, null | видалення сервера не знищує сервіси; на якому сервері працює; основа правил `[host]`, `[siblings]` |
 | external_id | text, null | ID контейнера / ключ БД з агента |
-| address, port | text, int, null | для http/tcp/ping |
+| address | text, null | для http (URL), tcp (host:port), ping і сервера з `ping_enabled` (ім'я хоста або IP) |
 | expected_status | text, default `200-399` | для http |
 | interval_s | int, default 60, CHECK ≥ 15 | |
 | agent_token_hash | text, null, unique | лише для `type = server`; токен показується один раз |

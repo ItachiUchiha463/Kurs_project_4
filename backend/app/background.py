@@ -8,7 +8,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 
 from app.db import SessionLocal, engine
 from app.models import Target
@@ -42,7 +42,7 @@ async def _check_one(target_id: int, owner_id: int, checker) -> None:
             async with SessionLocal() as db:
                 target = await db.get(Target, target_id)
                 if target and target.enabled:
-                    await checks.run_http_check(db, target, checker)
+                    await checks.run_check(db, target, checker)
                     await db.commit()
         except Exception:  # збій однієї перевірки не зупиняє інші
             log.exception("збій перевірки", extra={"target_id": target_id})
@@ -54,8 +54,8 @@ async def schedule_due(checker=None, now: float | None = None) -> int:
     """Запускає перевірки, час яких настав; повертає, скільки запущено."""
     now = time.monotonic() if now is None else now
     async with SessionLocal() as db:
-        rows = (await db.execute(select(Target.id, Target.owner_id, Target.interval_s)
-                                 .where(Target.check_type == "http", Target.enabled))).all()
+        rows = (await db.execute(select(Target.id, Target.owner_id, Target.interval_s).where(
+            Target.enabled, or_(Target.check_type.in_(("http", "tcp", "ping")), Target.ping_enabled)))).all()
     launched = 0
     for tid, owner, interval in rows:
         if tid in _running or _next_run.get(tid, 0) > now:

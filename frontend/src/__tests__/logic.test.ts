@@ -46,6 +46,13 @@ describe('схеми форм повторюють правила бекенда
     expect(targetSchema.safeParse({ name: 'shop', type: 'service', address: 'shop.example.ua' }).success).toBe(false)
     expect(targetSchema.safeParse({ name: 'shop', type: 'service', address: 'https://shop.example.ua' }).success).toBe(true)
     expect(targetSchema.safeParse({ name: '', type: 'server' }).success).toBe(false)
+    const svc = (check_type: 'tcp' | 'ping', address: string) => targetSchema.safeParse({ name: 's', type: 'service', check_type, address }).success
+    expect(svc('tcp', 'db.example.ua:5432')).toBe(true)
+    expect(svc('tcp', 'db.example.ua')).toBe(false)
+    expect(svc('ping', 'gw.example.ua')).toBe(true)
+    expect(svc('ping', 'https://gw.example.ua')).toBe(false)
+    expect(targetSchema.safeParse({ name: 'web', type: 'server', ping_enabled: true }).success).toBe(false)
+    expect(targetSchema.safeParse({ name: 'web', type: 'server', ping_enabled: true, address: 'web.example.ua' }).success).toBe(true)
   })
   it('закриття інциденту без коментаря заборонено', () => {
     expect(resolveSchema.safeParse({ comment: '   ' }).success).toBe(false)

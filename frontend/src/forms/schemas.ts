@@ -26,10 +26,17 @@ export const targetSchema = z
     type: z.enum(['server', 'service']),
     address: z.string().trim().optional(),
     host_id: z.string().optional(),
+    check_type: z.enum(['http', 'tcp', 'ping']).optional(),
+    ping_enabled: z.boolean().optional(),
   })
-  .refine((v) => v.type === 'server' || /^https?:\/\/\S+$/.test(v.address ?? ''), {
-    path: ['address'],
-    message: 'Адреса має починатися з http:// або https://',
+  .superRefine((v, ctx) => {
+    const a = v.address ?? ''
+    const kind = v.check_type ?? 'http'
+    const fail = (message: string) => ctx.addIssue({ code: 'custom', path: ['address'], message })
+    if (v.type === 'server') return void (v.ping_enabled && !a && fail('Для ping вкажіть адресу сервера'))
+    if (kind === 'http' && !/^https?:\/\/\S+$/.test(a)) fail('Адреса має починатися з http:// або https://')
+    if (kind === 'tcp' && !/^[^\s:/]+:\d{1,5}$/.test(a)) fail('Адреса має вигляд хост:порт, наприклад db.example.ua:5432')
+    if (kind === 'ping' && !/^[^\s:/]+$/.test(a)) fail('Вкажіть лише ім’я хоста або IP, без http:// і порту')
   })
 
 export const resolveSchema = z.object({
