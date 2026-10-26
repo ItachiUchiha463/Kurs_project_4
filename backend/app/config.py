@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     global_users: int = 100  # після цього реєстрація закривається (ТЗ 2.4)
     rate_register_per_min: int = 5  # з однієї IP-адреси (ТЗ розд. 6)
     rate_login_per_min: int = 10
+    rate_reset_per_min: int = 5  # запити скидання пароля з однієї IP
     login_lock_after: int = 10  # невдалих входів поспіль на один email
     login_lock_s: int = 900
 

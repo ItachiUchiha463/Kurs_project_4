@@ -39,6 +39,12 @@ export const targetSchema = z
     if (kind === 'ping' && !/^[^\s:/]+$/.test(a)) fail('Вкажіть лише ім’я хоста або IP, без http:// і порту')
   })
 
+export const forgotSchema = z.object({ email })
+
+export const resetSchema = z
+  .object({ password, repeat: z.string() })
+  .refine((v) => v.password === v.repeat, { path: ['repeat'], message: 'Паролі не збігаються' })
+
 export const resolveSchema = z.object({
   comment: z.string().trim().min(1, 'Напишіть, чому закриваєте інцидент – це побачать колеги').max(1000),
 })

@@ -5,12 +5,13 @@ import { RequireAuth } from '@/layouts/AppLayout'
 import { AddServerPage } from '@/pages/AddServer'
 import { DashboardPage } from '@/pages/Dashboard'
 import { IncidentsPage } from '@/pages/Incidents'
-import { LoginPage, RegisterPage } from '@/pages/Auth'
+import { ForgotPage, LoginPage, RegisterPage, ResetPage } from '@/pages/Auth'
 import { NotFoundPage } from '@/pages/NotFound'
 import { ProfilePage } from '@/pages/Profile'
 
 export const router = createBrowserRouter([
-  { element: <AuthLayout />, children: [{ path: '/login', element: <LoginPage /> }, { path: '/register', element: <RegisterPage /> }] },
+  { element: <AuthLayout />, children: [{ path: '/login', element: <LoginPage /> }, { path: '/register', element: <RegisterPage /> },
+    { path: '/forgot', element: <ForgotPage /> }, { path: '/reset', element: <ResetPage /> }] },
   {
     element: <RequireAuth />,
     children: [

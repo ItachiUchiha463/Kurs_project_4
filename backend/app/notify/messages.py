@@ -46,8 +46,10 @@ def local_time(ts: datetime) -> str:
 
 
 def render(kind: str, *, target: str = "", metric: str = "", instance: str = "", severity: str = "critical", value: float = 0.0,
-           ts: datetime | None = None, cause: str | None = None, minutes: int | None = None, dependents: int = 0) -> str:
+           ts: datetime | None = None, cause: str | None = None, minutes: int | None = None, dependents: int = 0, url: str = "") -> str:
     name = escape(target)
+    if kind == "reset":
+        return f"🔑 <b>Vigil</b>: скидання пароля. Перейдіть за посиланням (діє 30 хвилин): {url}\nЯкщо це були не ви, проігноруйте повідомлення."
     if kind == "test":
         return "✅ <b>Vigil</b>: тестове повідомлення. Сповіщення працюють."
     if kind == "resolved":

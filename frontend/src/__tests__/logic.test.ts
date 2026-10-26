@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { loginSchema, registerSchema, resolveSchema, targetSchema } from '@/forms/schemas'
+import { forgotSchema, loginSchema, registerSchema, resetSchema, resolveSchema, targetSchema } from '@/forms/schemas'
 import { duration, num, plural } from '@/lib/format'
 
 describe('plural', () => {
@@ -57,5 +57,15 @@ describe('схеми форм повторюють правила бекенда
   it('закриття інциденту без коментаря заборонено', () => {
     expect(resolveSchema.safeParse({ comment: '   ' }).success).toBe(false)
     expect(resolveSchema.safeParse({ comment: 'Перезапустив сервіс' }).success).toBe(true)
+  })
+})
+
+describe('скидання пароля', () => {
+  it('новий пароль підпорядковується тим самим правилам і має збігатися з повтором', () => {
+    expect(resetSchema.safeParse({ password: 'N3wPassword', repeat: 'N3wPassword' }).success).toBe(true)
+    expect(resetSchema.safeParse({ password: 'N3wPassword', repeat: 'other' }).success).toBe(false)
+    expect(resetSchema.safeParse({ password: 'short1', repeat: 'short1' }).success).toBe(false)
+    expect(forgotSchema.safeParse({ email: 'a@example.ua' }).success).toBe(true)
+    expect(forgotSchema.safeParse({ email: 'nope' }).success).toBe(false)
   })
 })

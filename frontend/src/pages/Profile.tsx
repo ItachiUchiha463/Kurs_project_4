@@ -1,11 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { useNavigate } from 'react-router-dom'
 
 import { LinkButton, PageHead } from '@/components/small'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
+import { clearToken } from '@/lib/auth'
 import { useMe } from '@/lib/queries'
 import type { Me, Severity, TelegramLink } from '@/lib/types'
 
@@ -13,6 +15,7 @@ export function ProfilePage() {
   document.title = 'Профіль – Vigil'
   const me = useMe()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [link, setLink] = useState<TelegramLink | null>(null)
 
   // поки користувач підключає бота, опитуємо профіль: після /start у Telegram прив'язка з'явиться сама
@@ -54,7 +57,7 @@ export function ProfilePage() {
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">Без Telegram Vigil покаже збої лише у вебінтерфейсі. Прив’язка потрібна й для відновлення пароля в наступних версіях.</p>
+            <p className="text-sm text-muted-foreground">Без Telegram Vigil покаже збої лише у вебінтерфейсі. Прив’язка потрібна й для відновлення пароля.</p>
             <Button className="w-fit" onClick={() => act(async () => setLink(await api<TelegramLink>('/me/telegram', { method: 'POST' })))}>Підключити Telegram</Button>
           </>
         )}
@@ -70,6 +73,17 @@ export function ProfilePage() {
             </label>
           ))}
         </div>
+      </section>
+
+      <section className="grid max-w-2xl gap-3 rounded-xl border bg-card p-5 shadow-sm" aria-labelledby="sess">
+        <h2 id="sess" className="text-lg font-semibold">Сеанси</h2>
+        <p className="text-sm text-muted-foreground">Завершить вхід на всіх пристроях, зокрема на цьому. Корисно, якщо ви загубили пристрій або не вийшли на чужому комп’ютері.</p>
+        <Button variant="outline" className="w-fit" onClick={() => act(async () => {
+          await api('/auth/logout-all', { method: 'POST' })
+          clearToken()
+          qc.clear()
+          navigate('/login', { replace: true })
+        })}>Вийти на всіх пристроях</Button>
       </section>
     </>
   )

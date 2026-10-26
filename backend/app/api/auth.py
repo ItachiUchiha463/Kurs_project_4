@@ -4,7 +4,7 @@ from app.config import settings
 from app.deps import CurrentUser, DbDep
 from app.errors import TooManyRequests
 from app.ratelimit import SlidingWindow
-from app.schemas.auth import LoginIn, RegisterIn, TokenOut, UserOut
+from app.schemas.auth import ForgotIn, LoginIn, RegisterIn, ResetIn, TokenOut, UserOut
 from app.schemas.auth import ProfileIn, TelegramLinkOut
 from app.services import auth, telegram_link
 
@@ -12,6 +12,7 @@ router = APIRouter(tags=["auth"])
 
 register_limiter = SlidingWindow(settings.rate_register_per_min, 60)
 login_limiter = SlidingWindow(settings.rate_login_per_min, 60)
+reset_limiter = SlidingWindow(settings.rate_reset_per_min, 60)
 
 
 def _limit(limiter: SlidingWindow):
@@ -31,6 +32,22 @@ async def register(data: RegisterIn, db: DbDep):
 @router.post("/auth/login", response_model=TokenOut, dependencies=[_limit(login_limiter)])
 async def login(data: LoginIn, db: DbDep, request: Request):
     return TokenOut(access_token=await auth.login(db, data, request.client.host if request.client else ""))
+
+
+@router.post("/auth/forgot", status_code=status.HTTP_202_ACCEPTED, dependencies=[_limit(reset_limiter)])
+async def forgot(data: ForgotIn, db: DbDep):
+    await auth.forgot_password(db, data.email)
+    return {"message": "Якщо до облікового запису прив'язано Telegram, посилання для скидання надіслано туди"}
+
+
+@router.post("/auth/reset", status_code=status.HTTP_204_NO_CONTENT, dependencies=[_limit(reset_limiter)])
+async def reset(data: ResetIn, db: DbDep):
+    await auth.reset_password(db, data.token, data.password)
+
+
+@router.post("/auth/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_all(user: CurrentUser):
+    await auth.logout_all(user)
 
 
 @router.get("/me", response_model=UserOut)

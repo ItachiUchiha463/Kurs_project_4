@@ -21,6 +21,8 @@ class User(Base):
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     tg_link_code_hash: Mapped[str | None] = mapped_column(Text)
     tg_link_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pwd_reset_hash: Mapped[str | None] = mapped_column(Text)  # SHA-256 одноразового токена зі скидання пароля
+    pwd_reset_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notify_min_severity: Mapped[str] = mapped_column(Text, default="warning", server_default="warning")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (CheckConstraint("status in ('active','blocked')"),
