@@ -126,7 +126,7 @@ export function TargetPage() {
       {tab === 'charts' ? (
         <>
           <div className="flex gap-2" role="group" aria-label="Період">
-            {([['1h', '1 год'], ['24h', '24 год']] as const).map(([k, l]) => (
+            {([['1h', '1 год'], ['24h', '24 год'], ['7d', '7 днів'], ['30d', '30 днів']] as const).map(([k, l]) => (
               <Button key={k} size="sm" variant={range === k ? 'default' : 'outline'} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</Button>
             ))}
           </div>

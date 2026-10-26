@@ -1,7 +1,7 @@
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { num, time } from '@/lib/format'
+import { dateTime, num, time } from '@/lib/format'
 import { METRICS, metricLabel, metricUnit } from '@/lib/metrics'
 import { useSeries, type Range } from '@/lib/queries'
 
@@ -19,6 +19,7 @@ export function MetricChart({ targetId, metric, instance = '', range, title }: P
   const meta = METRICS[metric]
   const unit = metricUnit(metric)
   const label = title ?? metricLabel(metric, instance)
+  const fmt = range === '7d' || range === '30d' ? dateTime : time  // на довгих періодах одного часу замало: потрібна й дата
 
   const values = data?.map((p) => p.value) ?? []
   const summary = values.length
@@ -41,13 +42,13 @@ export function MetricChart({ targetId, metric, instance = '', range, title }: P
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 6, right: 40, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="var(--grid)" vertical={false} />
-              <XAxis dataKey="ts" tickFormatter={time} minTickGap={48} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
+              <XAxis dataKey="ts" tickFormatter={fmt} minTickGap={48} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
               <YAxis domain={meta?.max ? [0, meta.max] : [0, 'auto']} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" width={46} />
               {meta?.warn != null && <ReferenceLine y={meta.warn} stroke="var(--warn)" strokeDasharray="4 4" label={{ value: 'попер.', position: 'right', fontSize: 10, fill: 'var(--warn)' }} />}
               {meta?.crit != null && <ReferenceLine y={meta.crit} stroke="var(--crit)" strokeDasharray="4 4" label={{ value: 'крит.', position: 'right', fontSize: 10, fill: 'var(--crit)' }} />}
               <Tooltip
                 contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
-                labelFormatter={(ts) => time(String(ts))}
+                labelFormatter={(ts) => fmt(String(ts))}
                 formatter={(v) => [`${num(Number(v))}${unit ? ' ' + unit : ''}`, label]}
               />
               <Line type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
