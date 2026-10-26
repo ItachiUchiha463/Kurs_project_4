@@ -105,3 +105,24 @@ async def test_logout_all_invalidates_every_token(client):
     assert (await client.get("/api/me", headers=h1)).status_code == 401
     assert (await client.get("/api/me", headers=h2)).status_code == 401
     assert (await login(client, OLD)).status_code == 200  # увійти знову можна
+
+
+async def test_password_reset_does_not_clear_other_users_login_lock(client, bot):
+    from app.services import auth as auth_service
+    await register(client)
+    auth_service.login_failures.fail("victim@example.com|1.2.3.4")
+    for _ in range(9):
+        auth_service.login_failures.fail("victim@example.com|1.2.3.4")
+    assert auth_service.login_failures.locked("victim@example.com|1.2.3.4")
+    await client.post("/api/auth/forgot", json={"email": EMAIL})
+    assert (await client.post("/api/auth/reset", json={"token": token_from(bot), "password": NEW})).status_code == 204
+    assert auth_service.login_failures.locked("victim@example.com|1.2.3.4")  # чуже блокування лишилось
+
+
+async def test_reset_messages_per_email_are_limited_but_answer_is_the_same(client, bot, monkeypatch):
+    from app.api import auth as auth_api
+    await register(client)
+    monkeypatch.setattr(auth_api.reset_limiter, "limit", 1000)  # перевіряємо ліміт за email, а не за IP
+    answers = [await client.post("/api/auth/forgot", json={"email": EMAIL}) for _ in range(5)]
+    assert {a.status_code for a in answers} == {202}
+    assert len(bot.sent) == 3  # 4-й і 5-й запити мовчки проігноровано

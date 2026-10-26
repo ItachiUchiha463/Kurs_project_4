@@ -78,8 +78,10 @@ def _clear(value: float, limit: float, th: Threshold) -> bool:
     if th.direction == "equals":
         return value != limit
     if th.direction == "above":
-        return value < limit * (1 - HYSTERESIS)
-    return value > limit * (1 + HYSTERESIS)
+        # поріг 0 («є хоч одна») запасу не має: 5 % від нуля – це нуль, і інцидент ніколи б не закрився
+        return value < limit * (1 - HYSTERESIS) if limit > 0 else value <= limit
+    # «нижче за»: запас – один пункт (відсотки): 5 % від 95 дали б 99,75, і здорова БД із 97 % лишалася б у інциденті
+    return value >= limit + 1
 
 
 def _lowest(th: Threshold) -> float:

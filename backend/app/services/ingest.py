@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.errors import AppError, AuthError, TooManyRequests
 from app.metric_catalog import AGENT_METRICS, PERCENT_METRICS
+from app.repositories import incidents as incidents_repo
 from app.repositories import metrics as metrics_repo
 from app.repositories import targets as targets_repo
 from app.models import Target
@@ -16,10 +17,11 @@ from app.security import hash_token
 from app.services import pipeline
 
 log = logging.getLogger("vigil.ingest")
-MAX_BATCH = 500
+MAX_BATCH = 2000  # ~150 контейнерів по 11 метрик; 500 вистачало лише на ~45
 MAX_INSTANCE_LEN = 100
 MAX_CONTAINERS = 100  # виявлених контейнерів на один сервер (ТЗ 2.4)
 GONE_HIDE_AFTER = timedelta(hours=24)  # контейнер, що зник із Docker, ховається через добу (ТЗ 5.3)
+GONE_DELETE_AFTER = timedelta(days=7)  # а через тиждень видаляється разом з історією: перестворені контейнери мають нові id й інакше копичаться
 _last_ingest: dict[int, float] = {}  # shortcut: у пам'яті процесу; рівно один процес (ТЗ розд. 3), при масштабуванні – у БД
 
 
@@ -86,8 +88,16 @@ async def sync_containers(db: AsyncSession, server: Target, found: list[Containe
             children[key] = child
         else:
             child.name, child.address = name, address
-    for key, child in children.items():
-        if key not in seen and not child.hidden and (child.last_seen or child.created_at or now) < now - GONE_HIDE_AFTER:
+    for key, child in list(children.items()):
+        if key in seen:
+            continue
+        last = child.last_seen or child.created_at or now
+        if last < now - GONE_DELETE_AFTER:
+            await db.delete(child)
+            del children[key]
+            pipeline.forget_target(child.id)
+            forget_target(child.id)
+        elif not child.hidden and last < now - GONE_HIDE_AFTER:
             child.hidden = True
     await db.flush()
     return children
@@ -149,10 +159,12 @@ async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: d
     target.agent_version = agent_version
     target.clock_offset_s = offset.total_seconds() if agent_time else None
     await pipeline.process(db, target, fresh[target.id])
-    for tid, points in fresh.items():
-        if tid != target.id:
-            owners[tid].last_seen = now
-            await pipeline.process(db, owners[tid], points)
+    if len(fresh) > 1:
+        down = await incidents_repo.server_down(db, target.id) is not None  # раз на пакет для всіх дочірніх об'єктів
+        for tid, points in fresh.items():
+            if tid != target.id:
+                owners[tid].last_seen = now
+                await pipeline.process(db, owners[tid], points, down)
     if rejected:
         log.warning("відкинуто записи", extra={"target_id": target.id, "rejected": len(rejected)})
     return IngestOut(accepted=accepted, rejected=rejected)

@@ -121,9 +121,11 @@ async def release(db: AsyncSession, server_id: int, ts: datetime) -> list[Change
     return changes
 
 
-async def refresh_status(db: AsyncSession, target: Target) -> None:
+async def refresh_status(db: AsyncSession, target: Target, server_down: bool | None = None) -> None:
+    """server_down: відомо викликачеві (ingest перевіряє раз на пакет); None – запитати в БД."""
     live = await repo.live_for_target(db, target.id)
-    server_down = target.host_id and target.type != "server" and await repo.server_down(db, target.host_id)
+    if server_down is None:
+        server_down = bool(target.host_id and target.type != "server" and await repo.server_down(db, target.host_id))
     if server_down or any(i.metric in AVAILABILITY_METRICS for i in live):
         target.status = "unavailable"
     elif any(i.severity == "critical" for i in live):
@@ -134,7 +136,7 @@ async def refresh_status(db: AsyncSession, target: Target) -> None:
         target.status = "ok"
 
 
-async def process(db: AsyncSession, target: Target, points: list[Point]) -> list[Change]:
+async def process(db: AsyncSession, target: Target, points: list[Point], server_down: bool | None = None) -> list[Change]:
     """points – лише свіжі записи; пізні з буфера агента сюди не потрапляють (ТЗ 5.1)."""
     latest: dict[tuple[str, str], Point] = {}
     for p in sorted(points, key=lambda x: x.ts):
@@ -150,7 +152,7 @@ async def process(db: AsyncSession, target: Target, points: list[Point]) -> list
         _states[key], actions = step(state, th, value, p.ts)
         for act in actions:
             changes += await _apply(db, target, key, act, p.ts)
-    await refresh_status(db, target)
+    await refresh_status(db, target, server_down)
     for c in changes:
         if c.kind in ("opened", "escalated"):
             await diagnosis.diagnose_incident(db, c.incident, target, c.ts)

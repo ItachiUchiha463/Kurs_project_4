@@ -51,7 +51,7 @@ def test_buffer_is_flushed_in_order_in_one_request_when_connection_returns():
     assert got == [[{"n": 1}, {"n": 2}, {"n": 3}]] and not s.queue
 
 
-def test_backlog_is_sent_in_chunks_of_at_most_500_records():
+def test_backlog_is_sent_in_chunks_of_at_most_2000_records():
     import json
     online, sizes = [False], []
 
@@ -63,11 +63,11 @@ def test_backlog_is_sent_in_chunks_of_at_most_500_records():
 
     s = _sender(handler)
     for _ in range(60):
-        s.send([{"n": 0}] * 20)  # 1200 записів у буфері
+        s.send([{"n": 0}] * 100)  # 6000 записів у буфері
     online[0] = True
     while s.queue:
-        s.send([{"n": 0}] * 20)
-    assert max(sizes) <= 500 and len(sizes) > 2
+        s.send([{"n": 0}] * 100)
+    assert max(sizes) <= 2000 and len(sizes) > 2
 
 
 def test_interval_header_is_sent():

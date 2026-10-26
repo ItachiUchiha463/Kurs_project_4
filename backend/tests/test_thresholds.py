@@ -111,10 +111,10 @@ def test_below_direction():
     th = Threshold("db_cache_hit_pct", warn=95, crit=90, direction="below", duration_s=0)
     assert classify(94, th) == "warning" and classify(89, th) == "critical" and classify(96, th) is None
     state, _ = run(th, [(0, 94)])
-    _, actions = run(th, [(10, 98)], state)  # 98 > 95 × 1,05 = 99,75? ні – ще не чисто
+    _, actions = run(th, [(10, 95.5)], state)  # ще менше за поріг + 1 пункт: не закриваємо
     assert actions == []
-    _, actions = run(th, [(20, 100)], state)
-    assert actions == [(20, Resolve(100))]
+    _, actions = run(th, [(20, 97)], state)  # здорове значення закриває інцидент (5 % від 95 вимагали б 99,75)
+    assert actions == [(20, Resolve(97))]
 
 
 def test_every_default_threshold_is_consistent():
@@ -122,3 +122,13 @@ def test_every_default_threshold_is_consistent():
         assert th.warn is not None or th.crit is not None
         if th.warn is not None and th.crit is not None:
             assert (th.warn < th.crit) if th.direction == "above" else (th.warn > th.crit)
+
+
+def test_zero_limit_incident_can_close():
+    """Пороги «≥ 1» записані як «> 0»: запас 5 % від нуля – нуль, тож закриття лишалося б неможливим."""
+    for metric in ("container_restarts", "db_locks_waiting"):
+        th = DEFAULT_THRESHOLDS[metric]
+        state, actions = run(th, [(0, 5), (120, 5)])  # другий рядок покриває duration_s = 60
+        assert [type(a).__name__ for _, a in actions] == ["Open"], metric
+        _, actions = run(th, [(130, 0), (260, 0)], state)
+        assert [type(a).__name__ for _, a in actions] == ["Resolve"], metric

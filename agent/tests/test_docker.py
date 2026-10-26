@@ -100,3 +100,13 @@ def test_sender_posts_object_with_containers_and_plain_list_without():
     assert bodies[0]["containers"][0]["name"] == "web" and len(bodies[0]["records"]) == 2
     s.send(batch)  # без Docker – старий формат (список)
     assert isinstance(bodies[1], list)
+
+
+def test_long_names_are_cut_to_the_server_limits():
+    long = [{"Id": RUNNING, "Names": ["/" + "n" * 150], "Image": "registry.example.com/" + "i" * 300, "State": "running", "Labels": {}}]
+
+    def handler(req):
+        return httpx.Response(200, json=long) if req.url.path == "/containers/json" else docker_api()(req)
+
+    infos, _ = collector(handler).collect()
+    assert len(infos[0]["name"]) == 100 and len(infos[0]["image"]) == 200

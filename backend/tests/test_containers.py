@@ -165,3 +165,46 @@ async def test_children_listing_and_hiding(client, user_factory):
     assert kid["id"] not in [t["id"] for t in (await client.get("/api/targets", headers=h)).json()]
     assert (await client.get(f"/api/targets/{srv['id']}/children", headers=h)).json()[0]["hidden"] is True  # у списку дочірніх лишається
     assert (await client.put(f"/api/targets/{srv['id']}/hidden", json={"hidden": True}, headers=h)).status_code == 422  # лише виявлені
+
+
+async def test_batch_of_600_records_is_accepted(client, user_factory):
+    """60 контейнерів × 11 метрик > 500 записів: раніше такий пакет відхилявся цілком."""
+    h = await user_factory()
+    srv = await server(client, h)
+    ts = now()
+    many = [{"id": f"c{i}", "name": f"app-{i}", "image": "x", "state": "running"} for i in range(60)]
+    records = [rec(m, 1.0, host=srv["name"], ts=ts, target=f"docker:c{i}") for i in range(60)
+               for m in ("container_running", "container_oom_killed", "container_restarts", "container_cpu", "container_mem",
+                         "container_mem_bytes", "container_net_in", "container_net_out", "container_block_read",
+                         "container_block_write", "container_health")]
+    assert len(records) == 660
+    r = await client.post("/api/ingest", json={"records": records, "containers": many},
+                          headers={"Authorization": f"Bearer {srv['agent_token']}"})
+    assert r.status_code == 200 and r.json()["accepted"] == 660
+
+
+async def test_container_gone_for_a_week_is_deleted_with_its_state(client, user_factory):
+    from app.services import pipeline
+    h = await user_factory()
+    srv = await server(client, h)
+    await push_child(client, srv, "container_running", 1)
+    async with SessionLocal() as db:
+        child_id = (await children(db, srv["id"]))[0].id
+    assert any(k[0] == child_id for k in pipeline._states) or child_id in ingest._series_seen
+    async with SessionLocal() as db:
+        server_row = await db.get(Target, srv["id"])
+        await ingest.sync_containers(db, server_row, [], now() + timedelta(days=8))
+        await db.commit()
+        assert await children(db, srv["id"]) == []
+    assert not any(k[0] == child_id for k in pipeline._states) and child_id not in ingest._series_seen
+
+
+async def test_deleting_server_forgets_state_of_its_containers(client, user_factory):
+    from app.services import pipeline
+    h = await user_factory()
+    srv = await server(client, h)
+    await push_child(client, srv, "container_running", 1)
+    async with SessionLocal() as db:
+        child_id = (await children(db, srv["id"]))[0].id
+    await client.delete(f"/api/targets/{srv['id']}", headers=h)
+    assert not any(k[0] == child_id for k in pipeline._states) and child_id not in ingest._series_seen

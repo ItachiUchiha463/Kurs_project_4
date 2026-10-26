@@ -65,8 +65,9 @@ class DockerCollector:
 
     def _one(self, c: dict) -> tuple[dict, list[Sample]]:
         cid = c["Id"][:12]
-        info = {"id": cid, "name": c["Names"][0].lstrip("/") if c.get("Names") else cid, "image": c.get("Image", ""),
-                "state": c.get("State", "")}
+        # обрізаємо до меж схеми сервера: один довгий образ інакше відхилив би весь пакет (422)
+        info = {"id": cid, "name": (c["Names"][0].lstrip("/") if c.get("Names") else cid)[:100], "image": c.get("Image", "")[:200],
+                "state": c.get("State", "")[:30]}
         detail = self.client.get(f"/containers/{cid}/json").raise_for_status().json()
         st = detail["State"]
         run = bool(st.get("Running"))
