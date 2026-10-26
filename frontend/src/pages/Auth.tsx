@@ -1,42 +1,37 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, type FieldValues, type UseFormSetError } from 'react-hook-form'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import type { z } from 'zod'
 
-import { applyApiError, Field, PasswordInput } from '@/components/Field'
+import { Field, PasswordInput, useFormSubmit } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { forgotSchema, loginSchema, registerSchema, resetSchema } from '@/forms/schemas'
 import { api } from '@/lib/api'
 import { setToken } from '@/lib/auth'
 
-function useAuthSubmit(path: string) {
-  const [formError, setFormError] = useState<string | null>(null)
+function useAuthSubmit<T extends FieldValues>(path: string, setError: UseFormSetError<T>, fields: string[]) {
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
-  const submit = async (body: unknown, onApiError: (e: unknown) => string | null, afterLogin?: string) => {
-    setFormError(null)
-    try {
-      const { access_token } = await api<{ access_token: string }>(path, { method: 'POST', body })
-      setToken(access_token)
-      qc.clear()
-      navigate(afterLogin ?? (location.state as { from?: string } | null)?.from ?? '/', { replace: true })
-    } catch (e) {
-      setFormError(onApiError(e))
-    }
-  }
+  const { formError, run } = useFormSubmit(setError, fields)
+  const submit = (body: unknown, afterLogin?: string) => run(async () => {
+    const { access_token } = await api<{ access_token: string }>(path, { method: 'POST', body })
+    setToken(access_token)
+    qc.clear()
+    navigate(afterLogin ?? (location.state as { from?: string } | null)?.from ?? '/', { replace: true })
+  })
   return { formError, submit }
 }
 
 export function LoginPage() {
   document.title = 'Вхід – Vigil'
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) })
-  const { formError, submit } = useAuthSubmit('/auth/login')
+  const { formError, submit } = useAuthSubmit('/auth/login', setError, ['email', 'password'])
   return (
-    <form onSubmit={handleSubmit((v) => submit(v, (e) => applyApiError(e, setError, ['email', 'password'])))} className="grid gap-4" noValidate>
+    <form onSubmit={handleSubmit((v) => submit(v))} className="grid gap-4" noValidate>
       <div>
         <h1 className="text-2xl font-semibold">Вхід</h1>
         <p className="text-sm text-muted-foreground">Моніторинг ваших серверів і сервісів</p>
@@ -58,10 +53,10 @@ export function LoginPage() {
 export function RegisterPage() {
   document.title = 'Реєстрація – Vigil'
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof registerSchema>>({ resolver: zodResolver(registerSchema) })
-  const { formError, submit } = useAuthSubmit('/auth/register')
+  const { formError, submit } = useAuthSubmit('/auth/register', setError, ['full_name', 'email', 'password'])
   return (
     <form
-      onSubmit={handleSubmit(({ repeat: _repeat, ...body }) => submit(body, (e) => applyApiError(e, setError, ['full_name', 'email', 'password']), '/targets/new'))}
+      onSubmit={handleSubmit(({ repeat: _repeat, ...body }) => submit(body, '/targets/new'))}
       className="grid gap-4" noValidate>
       <div>
         <h1 className="text-2xl font-semibold">Реєстрація</h1>
@@ -91,16 +86,11 @@ export function ForgotPage() {
   document.title = 'Скидання пароля – Vigil'
   const [sent, setSent] = useState(false)
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof forgotSchema>>({ resolver: zodResolver(forgotSchema) })
-  const [formError, setFormError] = useState<string | null>(null)
-  const submit = handleSubmit(async (body) => {
-    setFormError(null)
-    try {
-      await api('/auth/forgot', { method: 'POST', body })
-      setSent(true)
-    } catch (e) {
-      setFormError(applyApiError(e, setError, ['email']))
-    }
-  })
+  const { formError, run } = useFormSubmit(setError, ['email'])
+  const submit = handleSubmit((body) => run(async () => {
+    await api('/auth/forgot', { method: 'POST', body })
+    setSent(true)
+  }))
   if (sent) {
     return (
       <div className="grid gap-4" role="status">
@@ -132,16 +122,11 @@ export function ResetPage() {
   const token = useSearchParams()[0].get('token') ?? ''
   const navigate = useNavigate()
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof resetSchema>>({ resolver: zodResolver(resetSchema) })
-  const [formError, setFormError] = useState<string | null>(null)
-  const submit = handleSubmit(async ({ password }) => {
-    setFormError(null)
-    try {
-      await api('/auth/reset', { method: 'POST', body: { token, password } })
-      navigate('/login', { replace: true, state: { reset: true } })
-    } catch (e) {
-      setFormError(applyApiError(e, setError, ['password']))
-    }
-  })
+  const { formError, run } = useFormSubmit(setError, ['password'])
+  const submit = handleSubmit(({ password }) => run(async () => {
+    await api('/auth/reset', { method: 'POST', body: { token, password } })
+    navigate('/login', { replace: true, state: { reset: true } })
+  }))
   return (
     <form onSubmit={submit} className="grid gap-4" noValidate>
       <div>

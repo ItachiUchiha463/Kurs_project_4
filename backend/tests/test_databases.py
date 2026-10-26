@@ -5,14 +5,11 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app.models import Target
 from tests.test_containers import INFO as CONTAINER
+from tests.helpers import now
 from tests.test_incidents import incidents, server
 from tests.test_targets import rec
 
 DB = {"id": "orders", "name": "orders-db", "engine": "postgres"}
-
-
-def now():
-    return datetime.now(timezone.utc)
 
 
 async def push(client, srv, records, containers=(), databases=(DB,)):

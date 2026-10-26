@@ -46,6 +46,11 @@ export const METRICS: Record<string, MetricMeta> = {
   packet_loss: { label: 'Втрати пакетів', unit: '%', warn: 10, crit: 50, max: 100 },
 }
 
+/** Метрики 0/1 (доступність, прапорці): їхнє значення в тексті не показуємо; дзеркало FLAG_TEXT бекенда (notify/messages.py). */
+export const FLAG_METRICS = new Set([
+  'available', 'agent_alive', 'ping_available', 'container_running', 'db_up', 'container_oom_killed', 'container_health',
+])
+
 export const metricLabel = (metric: string, instance = '') =>
   (METRICS[metric]?.label ?? metric) + (instance ? ` (${instance})` : '')
 

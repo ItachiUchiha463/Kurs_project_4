@@ -19,8 +19,11 @@ METRIC_LABELS = {
     "ping_available": "Ping", "packet_loss": "Втрати пакетів",
     "container_running": "Контейнер працює", "container_oom_killed": "Нестача пам'яті (OOM)", "container_exit_code": "Код виходу",
     "container_health": "Healthcheck", "container_restarts": "Перезапуски", "container_cpu": "CPU контейнера", "container_mem": "RAM контейнера",
+    "db_up": "База даних доступна", "db_connections_pct": "З'єднання, % від максимуму", "db_idle_in_tx": "Транзакції idle in transaction",
+    "db_longest_query_s": "Найдовший запит", "db_locks_waiting": "Запити, що чекають блокування", "db_cache_hit_pct": "Влучання в кеш",
 }
-UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%", "container_cpu": "%", "container_mem": "%"}
+UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%", "container_cpu": "%", "container_mem": "%",
+         "db_connections_pct": "%", "db_cache_hit_pct": "%", "db_longest_query_s": "с"}
 AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум", "delta": "приріст"}
 
 

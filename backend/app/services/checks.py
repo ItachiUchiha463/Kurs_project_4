@@ -54,8 +54,6 @@ async def run_check(db: AsyncSession, target: Target, checker=None) -> CheckResu
     return result
 
 
-run_http_check = run_check  # назва з MVP: тести й виклики лишаються чинними
-
 
 async def check_agents(db: AsyncSession, now: datetime | None = None) -> int:
     """Сервери, від яких давно немає даних: agent_alive = 0. «Живий» агент сам пише agent_alive = 1 в /ingest."""

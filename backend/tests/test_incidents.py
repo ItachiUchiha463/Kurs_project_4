@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from tests.test_targets import rec
 
-NOW = lambda: datetime.now(timezone.utc)  # noqa: E731
+from tests.helpers import now as NOW  # noqa: E402
 
 
 async def server(client, h, name="web-01", interval=3600):

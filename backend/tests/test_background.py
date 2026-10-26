@@ -27,7 +27,7 @@ async def run_check(target_id, result):
         return result
 
     async with SessionLocal() as db:
-        await checks.run_http_check(db, await db.get(Target, target_id), fake)
+        await checks.run_check(db, await db.get(Target, target_id), fake)
         await db.commit()
 
 

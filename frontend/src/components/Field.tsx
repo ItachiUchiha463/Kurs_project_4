@@ -46,6 +46,20 @@ export const PasswordInput = forwardRef<HTMLInputElement, ComponentProps<typeof 
 })
 PasswordInput.displayName = 'PasswordInput'
 
+/** Спільна відправка форм: скидає загальну помилку, виконує запит, а збій розкладає по полях (applyApiError). */
+export function useFormSubmit<T extends FieldValues>(setError: UseFormSetError<T>, fields: string[]) {
+  const [formError, setFormError] = useState<string | null>(null)
+  const run = async (action: () => Promise<unknown>) => {
+    setFormError(null)
+    try {
+      await action()
+    } catch (e) {
+      setFormError(applyApiError(e, setError, fields))
+    }
+  }
+  return { formError, run }
+}
+
 /** Помилки 422 від бекенда розкладаємо по тих самих полях; решту повертаємо текстом для загального повідомлення. */
 export function applyApiError<T extends FieldValues>(err: unknown, setError: UseFormSetError<T>, fields: string[]): string | null {
   if (!(err instanceof ApiError)) return 'Сталася помилка'

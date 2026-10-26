@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import type { z } from 'zod'
 
-import { applyApiError, Field } from '@/components/Field'
+import { Field, useFormSubmit } from '@/components/Field'
 import { CommandBlock, LinkButton, PageHead } from '@/components/small'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,7 +65,6 @@ export function AddServerPage() {
   const servers = useTargets()
   const [created, setCreated] = useState<TargetCreated | null>(null)
   const [step, setStep] = useState(0)
-  const [formError, setFormError] = useState<string | null>(null)
   const { register, handleSubmit, watch, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof targetSchema>>({
     resolver: zodResolver(targetSchema), defaultValues: { type: 'server', name: '', check_type: 'http', ping_enabled: false },
   })
@@ -73,21 +72,17 @@ export function AddServerPage() {
   const checkType = watch('check_type')
   const pingEnabled = watch('ping_enabled')
 
-  const submit = handleSubmit(async (v) => {
-    setFormError(null)
-    try {
-      const body = {
-        name: v.name, type: v.type, address: v.address || undefined, host_id: v.host_id ? Number(v.host_id) : undefined,
-        check_type: v.type === 'service' ? v.check_type : undefined, ping_enabled: v.type === 'server' && v.ping_enabled,
-      }
-      const res = await api<TargetCreated>('/targets', { method: 'POST', body })
-      qc.invalidateQueries({ queryKey: ['targets'] })
-      setCreated(res)
-      setStep(res.type === 'server' ? 1 : 2)
-    } catch (e) {
-      setFormError(applyApiError(e, setError, ['name', 'address']))
+  const { formError, run } = useFormSubmit(setError, ['name', 'address'])
+  const submit = handleSubmit((v) => run(async () => {
+    const body = {
+      name: v.name, type: v.type, address: v.address || undefined, host_id: v.host_id ? Number(v.host_id) : undefined,
+      check_type: v.type === 'service' ? v.check_type : undefined, ping_enabled: v.type === 'server' && v.ping_enabled,
     }
-  })
+    const res = await api<TargetCreated>('/targets', { method: 'POST', body })
+    qc.invalidateQueries({ queryKey: ['targets'] })
+    setCreated(res)
+    setStep(res.type === 'server' ? 1 : 2)
+  }))
 
   return (
     <>

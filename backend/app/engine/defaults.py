@@ -30,4 +30,5 @@ DEFAULT_THRESHOLDS: dict[str, Threshold] = {t.metric: t for t in [
 ]}
 
 # метрики, інцидент на яких робить об'єкт «недоступним», а не «критичним» (ТЗ 7.2)
-AVAILABILITY_METRICS = {"available", "agent_alive", "ping_available", "container_running", "db_up"}
+SERVER_AVAILABILITY = ("agent_alive", "ping_available")  # інцидент на цих метриках робить сервер недоступним (ТЗ 7.1.1)
+AVAILABILITY_METRICS = {"available", *SERVER_AVAILABILITY, "container_running", "db_up"}

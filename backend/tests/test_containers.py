@@ -6,15 +6,12 @@ from app.db import SessionLocal
 from app.models import Target
 from app.services import checks, ingest
 from tests.test_background import ping_agent
+from tests.helpers import now
 from tests.test_incidents import incidents, server
 from tests.test_targets import rec
 
 CID = "3f2a9c"
 INFO = {"id": CID, "name": "web", "image": "nginx:1.27", "state": "running"}
-
-
-def now():
-    return datetime.now(timezone.utc)
 
 
 async def push_child(client, srv, metric, value, ago_s=0, cid=CID, containers=(INFO,)):

@@ -103,27 +103,25 @@ async def sync_containers(db: AsyncSession, server: Target, found: list[Containe
     return children
 
 
-async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: datetime | None, agent_version: str | None,
-                 agent_interval: int | None = None) -> IngestOut:
-    records = batch.records
+async def _authenticate(db: AsyncSession, token: str, records: int) -> Target:
+    """Токен агента, розмір пакета й частота запитів: усе, що перевіряється до розбору записів."""
     target = await targets_repo.get_by_agent_token(db, hash_token(token))
     if not target or not target.enabled:
         raise AuthError("Невірний токен агента")
-    if len(records) > MAX_BATCH:
+    if records > MAX_BATCH:
         raise AppError(f"Не більше {MAX_BATCH} записів у пакеті", code="batch_too_large")
     mono = time.monotonic()
     if mono - _last_ingest.get(target.id, -1e9) < settings.ingest_min_interval_s:
         raise TooManyRequests("Занадто часті запити")
     _last_ingest[target.id] = mono
+    return target
 
-    now = datetime.now(timezone.utc)
-    offset = clock_offset(agent_time, now)
+
+async def _collect(db: AsyncSession, target: Target, children: dict[str, Target], records: list[IngestRecord],
+                   offset: timedelta, now: datetime):
+    """Перевіряє записи: (рядки для БД, відхилені, свіжі точки для конвеєра, власники точок)."""
     rows, rejected = [], []
-    if agent_interval:
-        target.agent_interval_s = max(15, min(3600, agent_interval))
     fresh_after = now - timedelta(seconds=2 * target.effective_interval_s)
-    discovered = bool(batch.containers or batch.databases or any(r.target for r in records))
-    children = await sync_containers(db, target, batch.containers, now, batch.databases) if discovered else {}
     known: dict[int, set] = {}
     fresh: dict[int, list[pipeline.Point]] = {target.id: []}
     owners = {target.id: target}
@@ -151,6 +149,19 @@ async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: d
         if ts >= fresh_after:  # пізні записи з буфера лише зберігаються, інцидентів заднім числом не відкривають
             fresh.setdefault(owner.id, []).append(pipeline.Point(rec.metric, rec.instance, ts, rec.value))
             owners[owner.id] = owner
+    return rows, rejected, fresh, owners
+
+
+async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: datetime | None, agent_version: str | None,
+                 agent_interval: int | None = None) -> IngestOut:
+    target = await _authenticate(db, token, len(batch.records))
+    now = datetime.now(timezone.utc)
+    offset = clock_offset(agent_time, now)
+    if agent_interval:
+        target.agent_interval_s = max(15, min(3600, agent_interval))
+    discovered = bool(batch.containers or batch.databases or any(r.target for r in batch.records))
+    children = await sync_containers(db, target, batch.containers, now, batch.databases) if discovered else {}
+    rows, rejected, fresh, owners = await _collect(db, target, children, batch.records, offset, now)
     accepted = len(rows)
     rows.append({"target_id": target.id, "name": "agent_alive", "instance": "", "value": 1.0, "ts": now})  # доказ, що агент живий
     fresh[target.id].append(pipeline.Point("agent_alive", "", now, 1.0))

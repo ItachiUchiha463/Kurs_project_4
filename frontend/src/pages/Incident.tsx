@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { resolveSchema } from '@/forms/schemas'
 import { api } from '@/lib/api'
 import { dateTime, duration, num, time } from '@/lib/format'
-import { metricLabel, metricUnit } from '@/lib/metrics'
+import { FLAG_METRICS, metricLabel, metricUnit } from '@/lib/metrics'
 import { useIncident } from '@/lib/queries'
 import type { IncidentEvent } from '@/lib/types'
 
@@ -35,7 +35,7 @@ const DOT: Record<string, string> = { suppressed: 'bg-off', detected: 'bg-off', 
 
 function eventText(e: IncidentEvent, metric: string): string {
   const base = EVENT_TEXT[e.type] ?? e.type
-  const val = e.value != null && e.type !== 'acknowledged' && !['available', 'agent_alive'].includes(metric) ? `: ${num(e.value)} ${metricUnit(metric)}`.trimEnd() : ''
+  const val = e.value != null && e.type !== 'acknowledged' && !FLAG_METRICS.has(metric) ? `: ${num(e.value)} ${metricUnit(metric)}`.trimEnd() : ''
   return e.note ? `${e.note}` : base + (e.type === 'detected' || e.type === 'escalated' ? val : '')
 }
 

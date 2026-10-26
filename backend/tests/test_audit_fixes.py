@@ -411,3 +411,14 @@ async def test_manual_close_refreshes_target_status(client, user_factory):
     [inc] = await incidents(client, h)
     await client.post(f"/api/incidents/{inc['id']}/resolve", json={"comment": "лагоджу"}, headers=h)
     assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "ok"
+
+
+async def test_alert_text_never_shows_raw_metric_names():
+    """Для кожної метрики з типовим порогом текст сповіщення має бути зрозумілим, а не «db_up 0»."""
+    from app.engine.defaults import DEFAULT_THRESHOLDS
+    from app.notify import messages
+    ts = datetime.now(timezone.utc)
+    for metric in DEFAULT_THRESHOLDS:
+        opened = messages.render("opened", target="obj", metric=metric, severity="critical", value=1.0, ts=ts)
+        resolved = messages.render("resolved", target="obj", metric=metric, value=1.0, minutes=3)
+        assert metric not in opened and metric not in resolved, (metric, opened, resolved)

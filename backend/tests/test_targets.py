@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-NOW = lambda: datetime.now(timezone.utc)  # noqa: E731
+from tests.helpers import now as NOW  # noqa: E402
 
 
 def rec(metric="cpu_usage", value=50.0, host="web-01", ts=None, **kw):

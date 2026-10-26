@@ -4,7 +4,7 @@ import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.checks.net import split_host_port
+from app.addresses import split_host_port
 from app.config import settings
 from app.checks import ssrf
 from app.errors import NotFound, QuotaExceeded, Unprocessable

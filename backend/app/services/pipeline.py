@@ -3,10 +3,10 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import text, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS
+from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS, SERVER_AVAILABILITY
 from app.engine.thresholds import AGG_SQL, Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
@@ -83,8 +83,8 @@ async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) 
         repo.add_event(db, inc.id, "detected", act.value, act.first_breach_at)
         repo.add_event(db, inc.id, "suppressed" if parent else "opened", act.value, ts)
         changes = [Change("suppressed" if parent else "opened", inc, target, act.value, ts)]
-        if target.type == "server" and key[1] in repo.SERVER_AVAILABILITY:
-            for child in await repo.suppress_children(db, inc, ts):
+        if target.type == "server" and key[1] in SERVER_AVAILABILITY:
+            for child in await suppress_children(db, inc, ts):
                 changes.append(Change("suppressed", child, await db.get(Target, child.target_id), child.value_at_open or 0.0, ts))
             await db.execute(update(Target).where(Target.host_id == target.id).values(status="unavailable"))  # «недоступний через сервер»
         return changes
@@ -104,10 +104,35 @@ async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) 
         inc.status, inc.resolved_at = "resolved", ts
         repo.add_event(db, inc.id, "resolved", act.value, ts, note="автоматично")
         changes = [Change("resolved", inc, target, act.value, ts)]
-        if target.type == "server" and key[1] in repo.SERVER_AVAILABILITY:
+        if target.type == "server" and key[1] in SERVER_AVAILABILITY:
             changes += await release(db, target.id, ts)
         return changes
     return []
+
+
+async def suppress_children(db: AsyncSession, parent: Incident, ts) -> list[Incident]:
+    """Щойно сервер став недоступним: невідкриті дочірні інциденти (ще не підтверджені) стають придушеними.
+
+    shortcut: сповіщення про дочірній інцидент, що вже встигло піти, не відкликається.
+    """
+    rows = list(await db.scalars(select(Incident).join(Target, Target.id == Incident.target_id).where(
+        Target.host_id == parent.target_id, Incident.status == "open")))
+    for inc in rows:
+        inc.status, inc.suppressed_by = "suppressed", parent.id
+        repo.add_event(db, inc.id, "suppressed", ts=ts, note="Сервер недоступний")
+    return rows
+
+
+async def _release_children(db: AsyncSession, server_id: int, ts) -> list[Incident]:
+    """Сервер повернувся: придушені інциденти закриваються, а об'єкти оцінюються заново зі свіжих даних."""
+    if await repo.server_down(db, server_id):
+        return []
+    rows = list(await db.scalars(select(Incident).join(Target, Target.id == Incident.target_id).where(
+        Target.host_id == server_id, Incident.status == "suppressed")))
+    for inc in rows:
+        inc.status, inc.resolved_at = "resolved", ts
+        repo.add_event(db, inc.id, "resolved", ts=ts, note="Сервер відновився")
+    return rows
 
 
 async def release(db: AsyncSession, server_id: int, ts: datetime) -> list[Change]:
@@ -115,7 +140,7 @@ async def release(db: AsyncSession, server_id: int, ts: datetime) -> list[Change
     changes = []
     if not await repo.server_down(db, server_id):
         await db.execute(update(Target).where(Target.host_id == server_id, Target.status == "unavailable").values(status="unknown"))
-    for child in await repo.release_children(db, server_id, ts):
+    for child in await _release_children(db, server_id, ts):
         _states.pop((child.target_id, child.metric, child.instance), None)
         changes.append(Change("resolved", child, await db.get(Target, child.target_id), child.value_at_open or 0.0, ts))
     return changes

@@ -3,7 +3,7 @@ from datetime import datetime
 from html import escape as _escape
 from zoneinfo import ZoneInfo
 
-from app.engine.defaults import DEFAULT_THRESHOLDS
+from app.engine.defaults import AVAILABILITY_METRICS, DEFAULT_THRESHOLDS
 from app.engine.inference import METRIC_LABELS, UNITS
 
 
@@ -20,13 +20,17 @@ def num(v: float) -> str:
     return f"{v:.1f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
+# метрики-прапорці (0/1): значення в тексті не показуємо, лише суть події
+FLAG_TEXT = {
+    "available": "Сервіс недоступний", "ping_available": "Сервер не відповідає на ping", "agent_alive": "Агент не надсилає дані",
+    "container_running": "Контейнер не працює", "db_up": "База даних недоступна",
+    "container_oom_killed": "Контейнер убито через нестачу пам'яті", "container_health": "Контейнер не проходить healthcheck",
+}
+
+
 def describe(metric: str, instance: str, value: float) -> str:
-    if metric == "available":
-        return "Сервіс недоступний"
-    if metric == "ping_available":
-        return "Сервер не відповідає на ping"
-    if metric == "agent_alive":
-        return "Агент не надсилає дані"
+    if metric in FLAG_TEXT:
+        return FLAG_TEXT[metric]
     unit = UNITS.get(metric, "")
     inst = f" {instance}" if instance else ""
     return f"{METRIC_LABELS.get(metric, metric)}{inst} {num(value)}{' ' + unit if unit else ''}"
@@ -53,7 +57,7 @@ def render(kind: str, *, target: str = "", metric: str = "", instance: str = "",
     if kind == "test":
         return "✅ <b>Vigil</b>: тестове повідомлення. Сповіщення працюють."
     if kind == "resolved":
-        text = f"🟢 <b>Відновлено</b> · {name} · {escape(describe(metric, instance, value)) if metric not in ('available', 'agent_alive', 'ping_available') else 'працює'}"
+        text = f"🟢 <b>Відновлено</b> · {name} · {escape(describe(metric, instance, value)) if metric not in AVAILABILITY_METRICS else 'працює'}"
         return text + (f" · тривало {minutes} хв" if minutes is not None else "")
     title = TITLE[severity] + (" (підвищено)" if kind == "escalated" else "")
     text = (f"{ICON[severity]} <b>{title}</b> · {name} · {escape(describe(metric, instance, value))}"

@@ -13,7 +13,31 @@ import { api } from '@/lib/api'
 import { ago, duration } from '@/lib/format'
 import { metricLabel } from '@/lib/metrics'
 import { useChildren, useIncidents, useTarget, type Range } from '@/lib/queries'
+import type { Target } from '@/lib/types'
 import { agentConfig } from '@/pages/AddServer'
+
+interface ChartSpec { metric: string; instance?: string; title?: string }
+
+/** Які графіки показувати для об'єкта: новий тип – один запис у таблиці. */
+function chartsFor(t: Target, disks: string[]): ChartSpec[] {
+  const on = (cond: boolean, spec: ChartSpec): ChartSpec[] => (cond ? [spec] : [])
+  switch (t.type) {
+    case 'server':
+      return [
+        { metric: 'cpu_usage' }, { metric: 'ram_usage' },
+        ...disks.map((d) => ({ metric: 'disk_usage', instance: d, title: `Заповненість диска ${d}` })),
+        { metric: 'net_total' },
+        ...on('load_per_core' in t.latest, { metric: 'load_per_core' }),
+        ...on(t.ping_enabled, { metric: 'ping_ms' }),
+      ]
+    case 'database':
+      return ['db_connections_pct', 'db_cache_hit_pct', 'db_longest_query_s', 'db_tps'].map((metric) => ({ metric }))
+    case 'container':
+      return [{ metric: 'container_cpu' }, { metric: 'container_mem' }]
+    default:
+      return [{ metric: 'response_ms' }, ...on(t.check_type === 'ping', { metric: 'packet_loss' })]
+  }
+}
 
 export function TargetPage() {
   const id = Number(useParams().id)
@@ -110,33 +134,7 @@ export function TargetPage() {
             <p className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Даних ще немає – графіки з’являться після першого пакета від агента.</p>
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {target.type === 'server' ? (
-                <>
-                  <MetricChart targetId={id} metric="cpu_usage" range={range} />
-                  <MetricChart targetId={id} metric="ram_usage" range={range} />
-                  {disks.map((d) => <MetricChart key={d} targetId={id} metric="disk_usage" instance={d} range={range} title={`Заповненість диска ${d}`} />)}
-                  <MetricChart targetId={id} metric="net_total" range={range} />
-                  {'load_per_core' in target.latest && <MetricChart targetId={id} metric="load_per_core" range={range} />}
-                  {target.ping_enabled && <MetricChart targetId={id} metric="ping_ms" range={range} />}
-                </>
-              ) : target.type === 'database' ? (
-                <>
-                  <MetricChart targetId={id} metric="db_connections_pct" range={range} />
-                  <MetricChart targetId={id} metric="db_cache_hit_pct" range={range} />
-                  <MetricChart targetId={id} metric="db_longest_query_s" range={range} />
-                  <MetricChart targetId={id} metric="db_tps" range={range} />
-                </>
-              ) : target.type === 'container' ? (
-                <>
-                  <MetricChart targetId={id} metric="container_cpu" range={range} />
-                  <MetricChart targetId={id} metric="container_mem" range={range} />
-                </>
-              ) : (
-                <>
-                  <MetricChart targetId={id} metric="response_ms" range={range} />
-                  {target.check_type === 'ping' && <MetricChart targetId={id} metric="packet_loss" range={range} />}
-                </>
-              )}
+              {chartsFor(target, disks).map((c) => <MetricChart key={c.metric + (c.instance ?? '')} targetId={id} range={range} {...c} />)}
             </div>
           )}
         </>

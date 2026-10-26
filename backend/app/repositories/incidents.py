@@ -4,11 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import func
 
+from app.engine.defaults import SERVER_AVAILABILITY
 from app.models import Diagnosis, Incident, IncidentEvent, Rule, Target
 
 LIVE = ("open", "acknowledged")
 UNRESOLVED = LIVE + ("suppressed",)  # відповідає частковому унікальному індексу one_open_incident (status <> 'resolved')
-SERVER_AVAILABILITY = ("agent_alive", "ping_available")  # інцидент на цих метриках робить сервер недоступним (ТЗ 7.1.1)
 
 
 async def list_for_owner(db: AsyncSession, owner_id: int, status: str | None, target_id: int | None,
@@ -68,31 +68,6 @@ async def server_down(db: AsyncSession, server_id: int) -> Incident | None:
     """Відкритий інцидент недоступності сервера (agent_alive або ping_available), якщо є."""
     return await db.scalar(select(Incident).where(
         Incident.target_id == server_id, Incident.metric.in_(SERVER_AVAILABILITY), Incident.status.in_(LIVE)).order_by(Incident.id).limit(1))
-
-
-async def suppress_children(db: AsyncSession, parent: Incident, ts) -> list[Incident]:
-    """Щойно сервер став недоступним: невідкриті дочірні інциденти (ще не підтверджені) стають придушеними.
-
-    shortcut: сповіщення про дочірній інцидент, що вже встигло піти, не відкликається.
-    """
-    rows = list(await db.scalars(select(Incident).join(Target, Target.id == Incident.target_id).where(
-        Target.host_id == parent.target_id, Incident.status == "open")))
-    for inc in rows:
-        inc.status, inc.suppressed_by = "suppressed", parent.id
-        add_event(db, inc.id, "suppressed", ts=ts, note="Сервер недоступний")
-    return rows
-
-
-async def release_children(db: AsyncSession, server_id: int, ts) -> list[Incident]:
-    """Сервер повернувся: придушені інциденти закриваються, а об'єкти оцінюються заново зі свіжих даних."""
-    if await server_down(db, server_id):
-        return []
-    rows = list(await db.scalars(select(Incident).join(Target, Target.id == Incident.target_id).where(
-        Target.host_id == server_id, Incident.status == "suppressed")))
-    for inc in rows:
-        inc.status, inc.resolved_at = "resolved", ts
-        add_event(db, inc.id, "resolved", ts=ts, note="Сервер відновився")
-    return rows
 
 
 async def suppressed_counts(db: AsyncSession, incident_ids: list[int]) -> dict[int, int]:

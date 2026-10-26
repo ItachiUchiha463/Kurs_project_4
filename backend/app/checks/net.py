@@ -4,20 +4,13 @@ import platform
 import re
 import time
 
+from app.addresses import split_host_port  # noqa: F401 – лишається доступним як net.split_host_port
 from app.checks import ssrf
 from app.checks.http import CheckResult
 
 TCP_TIMEOUT_S = 10
 PING_COUNT = 3
 PING_TIMEOUT_S = 2
-
-
-def split_host_port(address: str) -> tuple[str, int]:
-    """«host:port» або «[ipv6]:port»; ValueError, якщо порт не вказано чи він поза 1..65535."""
-    host, sep, port = address.strip().rpartition(":")
-    if not sep or not host or not port.isdigit() or not 1 <= int(port) <= 65535:
-        raise ValueError("Адреса має вигляд хост:порт, порт – від 1 до 65535")
-    return host.strip("[]"), int(port)
 
 
 async def check_tcp(address: str, *, resolver=None, opener=None) -> CheckResult:

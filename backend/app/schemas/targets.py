@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 
 import httpx
-from app.checks.net import split_host_port
+from app.addresses import split_host_port
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
