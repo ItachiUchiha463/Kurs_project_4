@@ -87,3 +87,25 @@ export type LiveEvent =
   | { type: 'ready' }
   | { type: 'metrics'; target_id: number; status: Status; last_seen: string | null; values: Record<string, number> }
   | { type: 'incident'; change: string; incident: Incident }
+
+export interface MetricStat { avg: number; max: number }
+export interface ReportRow {
+  target_id: number
+  name: string
+  type: Target['type']
+  availability_pct: number
+  incidents: number
+  warning: number
+  critical: number
+  mean_detect_s: number | null
+  mean_recover_s: number | null
+  metrics: Record<string, MetricStat>
+}
+export interface Report {
+  start: string
+  end: string
+  incidents: number
+  critical: number
+  rows: ReportRow[]
+  top_causes: { cause: string; count: number }[]
+}

@@ -1,4 +1,4 @@
-import { Activity, LayoutDashboard, LogOut, Menu, TriangleAlert, UserRound } from 'lucide-react'
+import { Activity, FileBarChart, LayoutDashboard, LogOut, Menu, TriangleAlert, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -84,6 +84,7 @@ function AppLayout() {
             <span className="ml-auto rounded-full bg-crit px-2 py-0.5 text-xs font-bold text-white" aria-label={`${count} активних`}>{count}</span>
           )}
         </NavLink>
+        <NavLink to="/reports" className={link}><FileBarChart className="size-5" aria-hidden="true" />Звіти</NavLink>
         <NavLink to="/profile" className={link}><UserRound className="size-5" aria-hidden="true" />Профіль</NavLink>
         <Button variant="ghost" className="mt-2 justify-start gap-3 px-3 text-muted-foreground" onClick={logout}>
           <LogOut aria-hidden="true" />Вийти
