@@ -11,7 +11,7 @@ router = APIRouter(tags=["incidents"])
 
 @router.get("/incidents", response_model=list[IncidentOut])
 async def list_incidents(user: CurrentUser, db: DbDep,
-                         status: Literal["active", "open", "acknowledged", "resolved"] | None = None,
+                         status: Literal["active", "open", "acknowledged", "resolved", "suppressed"] | None = None,
                          target_id: int | None = None, severity: Literal["warning", "critical"] | None = None,
                          cursor: int | None = None, limit: Annotated[int, Query(ge=1, le=200)] = 50):
     return await service.list_incidents(db, user, status, target_id, severity, cursor, limit)

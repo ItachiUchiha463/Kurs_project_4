@@ -34,6 +34,7 @@ function applyMetrics(qc: QueryClient, e: Extract<LiveEvent, { type: 'metrics' }
 function applyIncident(qc: QueryClient, change: string, inc: Incident) {
   qc.invalidateQueries({ queryKey: ['incidents'] })
   qc.invalidateQueries({ queryKey: ['incident', inc.id] })
+  qc.invalidateQueries({ queryKey: ['targets'] })  // стан дочірніх об’єктів міг змінитися разом із сервером
   if (change === 'opened' || change === 'escalated') {
     const text = `${inc.target_name}: ${metricLabel(inc.metric, inc.instance)}`
     const show = inc.severity === 'critical' ? toast.error : toast.warning

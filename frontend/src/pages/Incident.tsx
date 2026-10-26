@@ -23,6 +23,7 @@ import { useIncident } from '@/lib/queries'
 import type { IncidentEvent } from '@/lib/types'
 
 const EVENT_TEXT: Record<string, string> = {
+  suppressed: 'Придушено: сервер недоступний',
   detected: 'Виявлено відхилення',
   opened: 'Інцидент відкрито – порушення триває заданий час',
   escalated: 'Рівень підвищено до критичного',
@@ -30,7 +31,7 @@ const EVENT_TEXT: Record<string, string> = {
   acknowledged: 'Підтверджено: хтось уже займається',
   resolved: 'Інцидент закрито',
 }
-const DOT: Record<string, string> = { detected: 'bg-off', opened: 'bg-crit', escalated: 'bg-crit', deescalated: 'bg-warn', acknowledged: 'bg-ack', resolved: 'bg-ok' }
+const DOT: Record<string, string> = { suppressed: 'bg-off', detected: 'bg-off', opened: 'bg-crit', escalated: 'bg-crit', deescalated: 'bg-warn', acknowledged: 'bg-ack', resolved: 'bg-ok' }
 
 function eventText(e: IncidentEvent, metric: string): string {
   const base = EVENT_TEXT[e.type] ?? e.type
@@ -119,6 +120,21 @@ export function IncidentPage() {
           <MetricChart targetId={inc.target_id} metric={inc.metric} instance={inc.instance} range="1h" title={`${metricLabel(inc.metric, inc.instance)} за останню годину`} />
         </div>
 
+        <div className="grid h-fit gap-4">
+        {inc.related.length > 0 && (
+          <section aria-label="Пов’язані об’єкти" className="rounded-xl border bg-card p-4 shadow-sm">
+            <h2 className="mb-3 font-semibold">Пов’язані об’єкти ({inc.related.length})</h2>
+            <ul className="grid gap-2 text-sm">
+              {inc.related.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-2">
+                  <IncidentStatusBadge status={r.status} severity={r.severity} />
+                  <Link to={`/incidents/${r.id}`} className="font-medium hover:underline">{r.target_name}</Link>
+                  <span className="text-muted-foreground">{metricLabel(r.metric, r.instance)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <section aria-label="Хронологія" className="h-fit rounded-xl border bg-card p-4 shadow-sm">
           <h2 className="mb-3 font-semibold">Хронологія</h2>
           <ol className="grid gap-3">
@@ -131,6 +147,7 @@ export function IncidentPage() {
             ))}
           </ol>
         </section>
+        </div>
       </div>
 
       <Dialog open={resolving} onOpenChange={(o) => { setResolving(o); if (!o) form.reset() }}>

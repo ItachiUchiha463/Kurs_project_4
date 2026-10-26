@@ -8,7 +8,7 @@ def should_notify(*, chat_id: int | None, min_severity: str, kind: str, severity
 
     «Відновлено» надсилаємо лише тим, кому раніше надсилали про сам інцидент, щоб у чаті була пара «впало → піднялось».
     """
-    if chat_id is None or kind == "deescalated":
+    if chat_id is None or kind in ("deescalated", "suppressed"):
         return False
     if SEVERITY_RANK[severity] < SEVERITY_RANK[min_severity]:
         return False

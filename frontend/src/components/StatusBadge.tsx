@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Circle, Minus, UserCheck, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, BellOff, Check, Circle, Minus, UserCheck, X, type LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import type { IncidentStatus, Severity, Status } from '@/lib/types'
@@ -39,6 +39,7 @@ export const SeverityBadge = ({ severity }: { severity: Severity }) => <Pill met
 /** Підтверджений інцидент показуємо синім «хтось уже займається»; закритий – зеленим. */
 export function IncidentStatusBadge({ status, severity }: { status: IncidentStatus; severity: Severity }) {
   if (status === 'acknowledged') return <Pill meta={{ label: 'Підтверджено', icon: UserCheck, cls: 'bg-ack-bg text-ack' }} />
+  if (status === 'suppressed') return <Pill meta={{ label: 'Придушено', icon: BellOff, cls: 'bg-muted text-muted-foreground' }} />
   if (status === 'resolved') return <Pill meta={{ label: 'Закрито', icon: Check, cls: 'bg-ok-bg text-ok' }} />
   return <SeverityBadge severity={severity} />
 }

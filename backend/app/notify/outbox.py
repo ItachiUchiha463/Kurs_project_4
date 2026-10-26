@@ -66,8 +66,9 @@ async def _render(db: AsyncSession, n: Notification) -> tuple[str, dict | None, 
         return text, None, reply_to
     row = (await db.execute(select(Rule.cause).join(Diagnosis, Diagnosis.rule_id == Rule.id)
                             .where(Diagnosis.incident_id == inc.id))).first()
+    dependents = (await incidents_repo.suppressed_counts(db, [inc.id])).get(inc.id, 0) if n.kind == "opened" else 0
     text = messages.render(n.kind, target=target.name, metric=inc.metric, instance=inc.instance, severity=inc.severity,
-                           value=value, ts=last.ts if last else inc.started_at, cause=row[0] if row else None)
+                           value=value, ts=last.ts if last else inc.started_at, cause=row[0] if row else None, dependents=dependents)
     return text, telegram.incident_keyboard(inc.id), None
 
 

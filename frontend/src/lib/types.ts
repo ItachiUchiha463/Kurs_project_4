@@ -36,6 +36,8 @@ export interface Incident {
   acknowledged_at: string | null
   resolved_at: string | null
   resolve_comment: string | null
+  suppressed_by: number | null
+  suppressed_count: number
 }
 export interface IncidentEvent {
   type: string
@@ -58,6 +60,7 @@ export interface Diagnosis {
 export interface IncidentDetail extends Incident {
   events: IncidentEvent[]
   diagnosis: Diagnosis | null
+  related: Incident[]
 }
 
 export interface Me {

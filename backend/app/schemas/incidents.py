@@ -18,6 +18,8 @@ class IncidentOut(BaseModel):
     acknowledged_at: datetime | None
     resolved_at: datetime | None
     resolve_comment: str | None
+    suppressed_by: int | None = None
+    suppressed_count: int = 0  # скільки дочірніх інцидентів придушено цим (ТЗ 7.1.1)
 
 
 class EventOut(BaseModel):
@@ -46,6 +48,7 @@ class DiagnosisOut(BaseModel):
 class IncidentDetail(IncidentOut):
     events: list[EventOut]
     diagnosis: DiagnosisOut | None = None
+    related: list[IncidentOut] = []  # придушені дочірні інциденти
 
 
 class ResolveIn(BaseModel):

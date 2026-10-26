@@ -11,16 +11,18 @@ from app.services import events, pipeline
 from app.services.diagnosis import NO_CAUSE, NO_CAUSE_HINT
 
 
-def _out(inc: Incident, target_name: str) -> IncidentOut:
+def _out(inc: Incident, target_name: str, suppressed_count: int = 0) -> IncidentOut:
     out = IncidentOut.model_validate(inc)
     out.target_name = target_name
+    out.suppressed_count = suppressed_count
     return out
 
 
 async def list_incidents(db: AsyncSession, user: User, status: str | None, target_id: int | None,
                          severity: str | None, cursor: int | None, limit: int) -> list[IncidentOut]:
     rows = await repo.list_for_owner(db, user.id, status, target_id, severity, cursor, limit)
-    return [_out(i, name) for i, name in rows]
+    counts = await repo.suppressed_counts(db, [i.id for i, _ in rows])
+    return [_out(i, name, counts.get(i.id, 0)) for i, name in rows]
 
 
 async def _get(db: AsyncSession, user: User, incident_id: int) -> tuple[Incident, str]:
@@ -34,7 +36,9 @@ async def get_incident(db: AsyncSession, user: User, incident_id: int) -> Incide
     inc, name = await _get(db, user, incident_id)
     events = [EventOut.model_validate(e) for e in await repo.events(db, inc.id)]
     diagnosis = await repo.diagnosis(db, inc.id)
-    return IncidentDetail(**_out(inc, name).model_dump(), events=events, diagnosis=diagnosis_out(diagnosis))
+    related = [_out(i, n) for i, n in await repo.suppressed_of(db, inc.id)]
+    return IncidentDetail(**_out(inc, name, sum(i.status == "suppressed" for i in related)).model_dump(), events=events, diagnosis=diagnosis_out(diagnosis),
+                          related=related)
 
 
 def diagnosis_out(row) -> DiagnosisOut | None:
@@ -63,6 +67,8 @@ async def resolve(db: AsyncSession, user: User, incident_id: int, comment: str) 
     inc.status, inc.resolved_at, inc.resolve_comment = "resolved", datetime.now(timezone.utc), comment.strip()
     repo.add_event(db, inc.id, "resolved", user_id=user.id, note=f"Закрито вручну: {inc.resolve_comment}")
     pipeline.keep_silent(inc)
+    if inc.metric in repo.SERVER_AVAILABILITY:  # закрили вручну: придушені дочірні об'єкти теж звільняються
+        await pipeline.release(db, inc.target_id, inc.resolved_at)
     await pipeline.refresh_status(db, await db.get(Target, inc.target_id))
     publish_after_commit(db, user.id, events.incident_event(inc, name, "resolved"))
     return _out(inc, name)
