@@ -160,7 +160,7 @@ export function AddServerPage() {
           <details className="text-sm">
             <summary className="cursor-pointer font-medium">Windows або встановлення вручну</summary>
             <div className="mt-2 grid gap-3">
-              <p className="text-muted-foreground">Потрібен Python 3.11 або новіший.</p>
+              <p className="text-muted-foreground">Потрібен Python 3.10 або новіший.</p>
               <div>
                 <h2 className="mb-1 font-semibold">1. Файл agent.toml</h2>
                 <CommandBlock>{agentConfig(created.name, created.agent_token)}</CommandBlock>

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Встановлення агента Vigil на Linux однією командою (ТЗ 5.1.1). Потрібні root і Python 3.11+.
+# Встановлення агента Vigil на Linux однією командою (ТЗ 5.1.1). Потрібні root і Python 3.10+.
 #
 #   curl -fsSL <адреса>/install.sh | sudo bash -s -- --server https://vigil.example.com --token vgl_... --host web-01
 #
 # Повторний запуск оновлює код і налаштування та перезапускає службу. Видалення: ... --uninstall
 set -euo pipefail
 
-TARBALL="${VIGIL_AGENT_TARBALL:-https://github.com/ItachiUchiha463/Kurs_project_4/archive/refs/heads/main.tar.gz}"
+REF="${VIGIL_REF:-main}"  # гілка чи тег випуску, наприклад VIGIL_REF=v1.3: щоб не залежати від поточного main
+TARBALL="${VIGIL_AGENT_TARBALL:-https://github.com/ItachiUchiha463/Kurs_project_4/archive/$REF.tar.gz}"
 DIR="${VIGIL_AGENT_DIR:-/opt/vigil-agent}"
 SERVER="" TOKEN="" HOST="" SRC_DIR="" INTERVAL=15
 DOCKER=0 POSTGRES=0 SERVICE=1 UNINSTALL=0
@@ -61,14 +62,14 @@ fi
 [[ "$INTERVAL" =~ ^[0-9]+$ ]] && [ "$INTERVAL" -ge 15 ] || die "--interval: ціле число не менше 15"
 
 PY=""
-for c in python3.13 python3.12 python3.11 python3; do
-  command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null && { PY="$c"; break; }
+for c in python3.13 python3.12 python3.11 python3.10 python3; do
+  command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null && { PY="$c"; break; }
 done
 if [ -z "$PY" ] && command -v apt-get >/dev/null 2>&1; then
   echo "Встановлюю python3..."; apt-get update -qq && apt-get install -y -qq python3 python3-venv curl >/dev/null
-  command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' && PY=python3
+  command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' && PY=python3
 fi
-[ -n "$PY" ] || die "потрібен Python 3.11 або новіший (на Ubuntu це 24.04, на Debian – 12)"
+[ -n "$PY" ] || die "потрібен Python 3.10 або новіший (Ubuntu 22.04+, Debian 12+)"
 
 echo "Завантажую код агента..."
 mkdir -p "$DIR/app"
@@ -86,7 +87,7 @@ echo "Встановлюю залежності..."
 if [ ! -x "$DIR/venv/bin/python" ]; then
   "$PY" -m venv "$DIR/venv" 2>/dev/null || { command -v apt-get >/dev/null && apt-get install -y -qq python3-venv >/dev/null && "$PY" -m venv "$DIR/venv"; } || die "не вдалося створити venv"
 fi
-EXTRA="psutil httpx"; [ "$POSTGRES" -eq 1 ] && EXTRA="$EXTRA psycopg[binary]"
+EXTRA="psutil httpx"; "$PY" -c 'import sys; sys.exit(sys.version_info >= (3, 11))' && EXTRA="$EXTRA tomli"; [ "$POSTGRES" -eq 1 ] && EXTRA="$EXTRA psycopg[binary]"
 "$DIR/venv/bin/pip" install -q --disable-pip-version-check $EXTRA
 
 cat > "$DIR/app/agent.toml.new" <<EOF

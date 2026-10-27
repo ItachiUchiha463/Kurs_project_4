@@ -56,6 +56,16 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  installer:
+    # install.sh ставить службу від root: поломку краще побачити до того, як її побачить користувач
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck agent/install.sh
+      - run: sudo bash agent/install.sh --src-dir agent --no-service --server https://vigil.test --token vgl_ci --host ci-host
+      - run: sudo /opt/vigil-agent/venv/bin/python -c "import tomllib; c = tomllib.load(open('/opt/vigil-agent/app/agent.toml', 'rb')); assert c['host'] == 'ci-host' and c['interval'] == 15"
+      - run: sudo bash agent/install.sh --uninstall && test ! -e /opt/vigil-agent
+
   images:
     # Dockerfile'и й Compose ламаються тихо, доки їх не зберуть: краще дізнатися до деплою
     runs-on: ubuntu-latest

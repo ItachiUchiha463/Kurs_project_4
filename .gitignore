@@ -37,3 +37,6 @@ Thumbs.db
 .claude/settings.local.json
 *.egg-info/
 *.log
+
+# граф знань graphify
+graphify-out/

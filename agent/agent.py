@@ -2,12 +2,16 @@
 import argparse
 import logging
 import time
-import tomllib
 from collections import deque
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
 import httpx
+
+try:
+    import tomllib
+except ImportError:  # Python 3.10 (Ubuntu 22.04)
+    import tomli as tomllib
 
 from collectors.docker import DockerCollector, client_for
 from collectors.postgres import PostgresCollector

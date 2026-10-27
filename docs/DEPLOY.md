@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/ItachiUchiha463/Kurs_project_4/main
 
 Скрипт ставить Python (на Ubuntu/Debian), створює `/opt/vigil-agent`, пише `agent.toml` і запускає службу `vigil-agent`. Додаткові параметри: `--docker`, `--postgres`, `--interval`, `--no-service`; повторний запуск оновлює агента, `--uninstall` видаляє. Журнал: `journalctl -u vigil-agent -f`.
 
-Скрипт береться з гілки `main` на GitHub, тому репозиторій має бути запушений. Ручне встановлення (Windows або без systemd):
+Скрипт береться з гілки `main` на GitHub, тому репозиторій має бути запушений. Щоб зафіксувати версію, задайте тег: `sudo VIGIL_REF=v1.3 bash -s -- …` (за замовчуванням `main`). Потрібен Python 3.10+ (Ubuntu 22.04+, Debian 12+). Ручне встановлення (Windows або без systemd):
 
 
 ```bash
