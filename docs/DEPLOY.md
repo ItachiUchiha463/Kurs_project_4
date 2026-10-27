@@ -129,3 +129,37 @@ dsn  = "postgresql://vigil_monitor:***@localhost:5432/orders"
 ```
 
 База з'явиться дочірнім об'єктом сервера. Запити до неї мають таймаут 5 с; якщо база не відповідає, агент надсилає лише `db_up = 0`.
+
+## 7. CI/CD (GitHub Actions)
+
+- **CI** (`.github/workflows/ci.yml`) запускається на кожен push у `main` і на pull request: тести бекенда (з TimescaleDB), агента, фронтенду (`tsc`, `vitest`, `vite build`) і збірка образів `backend` та `frontend`.
+- **Deploy** (`.github/workflows/deploy.yml`) після успішного CI на `main` (або вручну: Actions → Deploy → Run workflow) заходить на сервер по SSH, виконує `git pull --ff-only && docker compose up -d --build` і перевіряє `/api/health`.
+
+### Налаштування (один раз)
+
+1. На своєму комп'ютері створіть окремий ключ лише для деплою:
+```bash
+ssh-keygen -t ed25519 -f deploy_key -N ""
+```
+2. Додайте **публічний** ключ (`deploy_key.pub`) у `~/.ssh/authorized_keys` користувача на сервері.
+3. Зніміть відбиток сервера (щоб підключення було до того самого сервера):
+```bash
+ssh-keyscan -H <адреса-сервера>
+```
+4. GitHub → репозиторій → Settings → Secrets and variables → Actions:
+
+| Тип | Ім'я | Значення |
+|---|---|---|
+| Secret | `DEPLOY_HOST` | адреса або IP сервера |
+| Secret | `DEPLOY_USER` | користувач SSH (`azureuser`, `ubuntu`) |
+| Secret | `DEPLOY_KEY` | вміст файлу `deploy_key` (приватний ключ) |
+| Secret | `DEPLOY_KNOWN_HOSTS` | вивід `ssh-keyscan` з кроку 3 |
+| Variable | `DEPLOY_URL` | `https://<ваш-домен>` |
+| Variable | `DEPLOY_DIR` | папка з проєктом на сервері (типово `vigil`) |
+
+5. Settings → Environments → створіть `production` (за потреби додайте обов'язкового рецензента: деплой чекатиме вашого підтвердження).
+6. Settings → Branches → правило для `main`: merge лише після зеленого CI.
+
+Файли `deploy_key` не комітьте (`*.key`/`*.pem` в `.gitignore`, але ім'я `deploy_key` перейменуйте або видаліть після додавання в секрети).
+
+**Обмеження.** Порт 22 має бути досяжний з інтернету: серверам GitHub Actions немає фіксованих IP. Якщо SSH обмежений вашою IP (як на Azure за цією інструкцією), деплой запускайте вручну з комп'ютера, або поставте self-hosted runner на самому сервері.
