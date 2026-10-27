@@ -20,10 +20,17 @@ import { cn } from '@/lib/utils'
 export const agentConfig = (host: string, token: string) =>
   `server   = "${location.origin}"\ntoken    = "${token}"\nhost     = "${host}"\ninterval = 15`
 
-const INSTALL = `git clone https://github.com/ItachiUchiha463/Kurs_project_4.git
+const REPO = 'ItachiUchiha463/Kurs_project_4'
+const sh = (v: string) => `'${v.replaceAll("'", "'\\''")}'`  // значення в одинарних лапках: назва об'єкта може містити пробіли й спецсимволи
+
+/** Команда в один рядок для Linux: скрипт сам ставить залежності, пише agent.toml і створює службу systemd. */
+export const installCommand = (host: string, token: string, origin = location.origin) =>
+  `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/agent/install.sh | sudo bash -s -- --server ${sh(origin)} --token ${sh(token)} --host ${sh(host)}`
+
+const MANUAL = `git clone https://github.com/${REPO}.git
 cd Kurs_project_4/agent
 pip install psutil httpx
-# збережіть вміст вище як agent.toml у цій папці, потім:
+# збережіть файл agent.toml (вище) у цій папці, потім:
 python agent.py --config agent.toml`
 
 const STEPS = ['Дані об’єкта', 'Встановлення агента', 'Перші дані']
@@ -148,15 +155,22 @@ export function AddServerPage() {
 
       {step === 1 && created?.agent_token && (
         <section className="grid max-w-2xl gap-4 rounded-xl border bg-card p-5 shadow-sm">
-          <p>Виконайте на сервері <b>{created.name}</b>. Потрібен Python 3.11 або новіший.</p>
-          <div>
-            <h2 className="mb-1 text-sm font-semibold">1. Файл agent.toml</h2>
-            <CommandBlock>{agentConfig(created.name, created.agent_token)}</CommandBlock>
-          </div>
-          <div>
-            <h2 className="mb-1 text-sm font-semibold">2. Встановлення й запуск</h2>
-            <CommandBlock>{INSTALL}</CommandBlock>
-          </div>
+          <p>Виконайте одну команду на сервері <b>{created.name}</b> (Linux, від імені адміністратора). Скрипт встановить Python-залежності, збереже налаштування й запустить агента як службу.</p>
+          <CommandBlock>{installCommand(created.name, created.agent_token)}</CommandBlock>
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Windows або встановлення вручну</summary>
+            <div className="mt-2 grid gap-3">
+              <p className="text-muted-foreground">Потрібен Python 3.11 або новіший.</p>
+              <div>
+                <h2 className="mb-1 font-semibold">1. Файл agent.toml</h2>
+                <CommandBlock>{agentConfig(created.name, created.agent_token)}</CommandBlock>
+              </div>
+              <div>
+                <h2 className="mb-1 font-semibold">2. Встановлення й запуск</h2>
+                <CommandBlock>{MANUAL}</CommandBlock>
+              </div>
+            </div>
+          </details>
           <p className="text-sm text-muted-foreground">Токен показується лише зараз. Агент лише надсилає дані – вхідні порти відкривати не треба.</p>
           <Button className="w-fit" onClick={() => setStep(2)}>Я виконав команди</Button>
         </section>

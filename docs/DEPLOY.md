@@ -53,7 +53,16 @@ docker compose exec db pg_dump -U vigil vigil | gzip > ~/vigil-$(date +%F).sql.g
 
 ## 4. Агент на демо-машині
 
-Потрібні Python 3.11+ і git. Токен і `agent.toml` показує майстер «Додати об'єкт» (потрібно, щоб `host` у файлі збігався з назвою об'єкта).
+Потрібен Linux із systemd. Майстер «Додати об'єкт» показує готову команду з вашою адресою, токеном і назвою – її достатньо виконати на машині:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ItachiUchiha463/Kurs_project_4/main/agent/install.sh | sudo bash -s -- --server https://ВАША_АДРЕСА --token vgl_... --host НАЗВА
+```
+
+Скрипт ставить Python (на Ubuntu/Debian), створює `/opt/vigil-agent`, пише `agent.toml` і запускає службу `vigil-agent`. Додаткові параметри: `--docker`, `--postgres`, `--interval`, `--no-service`; повторний запуск оновлює агента, `--uninstall` видаляє. Журнал: `journalctl -u vigil-agent -f`.
+
+Скрипт береться з гілки `main` на GitHub, тому репозиторій має бути запушений. Ручне встановлення (Windows або без systemd):
+
 
 ```bash
 git clone https://github.com/ItachiUchiha463/Kurs_project_4.git && cd Kurs_project_4/agent
