@@ -56,6 +56,17 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class RegisterOut(BaseModel):
+    """Без токена, якщо потрібно підтвердити пошту: вхід лише після переходу за посиланням із листа."""
+    access_token: str | None = None
+    token_type: str = "bearer"
+    verify_email: bool = False
+
+
+class VerifyIn(BaseModel):
+    token: str
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)  # password_hash та інше службове в схемі відсутнє
     id: int

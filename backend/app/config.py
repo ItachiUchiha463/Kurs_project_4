@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     metrics_retention_days: int = 30
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
+    smtp_host: str = ""  # порожньо – пошта вимкнена: реєстрація без підтвердження, скидання пароля лише через Telegram
+    smtp_port: int = 587  # STARTTLS; Azure блокує вихідний порт 25
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""  # типово дорівнює smtp_user
     quota_targets: int = 20
     quota_rules: int = 50  # власних правил виведення на користувача (ТЗ 2.4)
     ingest_min_interval_s: float = 5  # не частіше за один запит /ingest від агента (ТЗ 2.4)

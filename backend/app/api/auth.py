@@ -4,7 +4,7 @@ from app.config import settings
 from app.deps import CurrentUser, DbDep
 from app.errors import TooManyRequests
 from app.ratelimit import SlidingWindow
-from app.schemas.auth import ForgotIn, LoginIn, RegisterIn, ResetIn, TokenOut, UserOut
+from app.schemas.auth import ForgotIn, LoginIn, RegisterIn, RegisterOut, ResetIn, TokenOut, UserOut, VerifyIn
 from app.schemas.auth import ProfileIn, TelegramLinkOut
 from app.services import auth, telegram_link
 
@@ -23,10 +23,16 @@ def _limit(limiter: SlidingWindow):
     return Depends(check)
 
 
-@router.post("/auth/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED,
+@router.post("/auth/register", response_model=RegisterOut, status_code=status.HTTP_201_CREATED,
              dependencies=[_limit(register_limiter)])
 async def register(data: RegisterIn, db: DbDep):
-    return TokenOut(access_token=await auth.register(db, data))
+    token = await auth.register(db, data)
+    return RegisterOut(access_token=token, verify_email=token is None)
+
+
+@router.post("/auth/verify", response_model=TokenOut, dependencies=[_limit(reset_limiter)])
+async def verify(data: VerifyIn, db: DbDep):
+    return TokenOut(access_token=await auth.verify_email(db, data.token))
 
 
 @router.post("/auth/login", response_model=TokenOut, dependencies=[_limit(login_limiter)])

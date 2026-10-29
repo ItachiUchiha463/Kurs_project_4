@@ -23,6 +23,9 @@ class User(Base):
     tg_link_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     pwd_reset_hash: Mapped[str | None] = mapped_column(Text)  # SHA-256 одноразового токена зі скидання пароля
     pwd_reset_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # порожньо – пошту не підтверджено, вхід заборонено
+    verify_hash: Mapped[str | None] = mapped_column(Text)  # SHA-256 одноразового токена підтвердження пошти
+    verify_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notify_min_severity: Mapped[str] = mapped_column(Text, default="warning", server_default="warning")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (CheckConstraint("status in ('active','blocked')"),
