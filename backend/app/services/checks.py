@@ -31,22 +31,24 @@ def _points(result: CheckResult, now: datetime, prefix: str, with_status: bool) 
     return pts
 
 
+# Strategy: спосіб перевірки залежить від типу об'єкта; новий вид перевірки – новий рядок (виконавець, префікс метрик, чи є status_code)
+STRATEGIES = {
+    "server": (check_ping, "ping_", False),
+    "ping": (check_ping, "", False),
+    "tcp": (check_tcp, "", False),
+    "http": (check_http, "", True),
+}
+
+
 async def run_check(db: AsyncSession, target: Target, checker=None) -> CheckResult:
     """Перевірка за типом об'єкта: http / tcp / ping для сервісу, ping для сервера з ping_enabled.
     `checker` підміняє виконавця в тестах (для http сигнатура (url, expected_status), для tcp і ping – (address))."""
     now = datetime.now(timezone.utc)
-    if target.type == "server":
-        result = await (checker or check_ping)(target.address)
-        points = _points(result, now, "ping_", False)
-    elif target.check_type == "tcp":
-        result = await (checker or check_tcp)(target.address)
-        points = _points(result, now, "", False)
-    elif target.check_type == "ping":
-        result = await (checker or check_ping)(target.address)
-        points = _points(result, now, "", False)
-    else:
-        result = await (checker or check_http)(target.address, target.expected_status)
-        points = _points(result, now, "", True)
+    key = "server" if target.type == "server" else target.check_type
+    run, prefix, with_status = STRATEGIES.get(key, STRATEGIES["http"])
+    args = (target.address, target.expected_status) if with_status else (target.address,)
+    result = await (checker or run)(*args)
+    points = _points(result, now, prefix, with_status)
     # last_seen сервера оновлює агент: за ним судять, чи живий агент, а ping про це нічого не каже
     if target.type != "server":
         target.last_seen = now

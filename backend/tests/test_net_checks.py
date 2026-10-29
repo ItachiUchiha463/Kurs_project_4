@@ -158,5 +158,8 @@ async def test_scheduler_picks_up_ping_servers_and_tcp_services(client, user_fac
     background._next_run.clear()
     background._running.clear()
     assert await background.schedule_due(fake) == 2
-    await asyncio.sleep(0.3)
+    for _ in range(50):  # перевірки йдуть фоном: чекаємо, а не гадаємо тривалість
+        if len(seen) == 2:
+            break
+        await asyncio.sleep(0.1)
     assert len(seen) == 2
