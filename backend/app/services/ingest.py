@@ -107,7 +107,7 @@ async def _authenticate(db: AsyncSession, token: str, records: int) -> Target:
     """Токен агента, розмір пакета й частота запитів: усе, що перевіряється до розбору записів."""
     target = await targets_repo.get_by_agent_token(db, hash_token(token))
     if not target or not target.enabled:
-        raise AuthError("Невірний токен агента")
+        raise AuthError("Неправильний токен агента")
     if records > MAX_BATCH:
         raise AppError(f"Не більше {MAX_BATCH} записів у пакеті", code="batch_too_large")
     mono = time.monotonic()

@@ -35,7 +35,7 @@ test.describe.serial('Vigil, наскрізні сценарії', () => {
     await page.locator('#email').fill('nobody@example.com')
     await page.locator('#password').fill(PASSWORD)
     await page.getByRole('button', { name: 'Увійти' }).click()
-    await expect(page.getByRole('alert')).toContainText('Невірний email або пароль')
+    await expect(page.getByRole('alert')).toContainText('Неправильний email або пароль')
     await expect(page).toHaveURL(/\/login/)
   })
 
