@@ -71,5 +71,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: cp .env.example .env  # docker-compose.yml читає env_file: .env, а в репозиторії лише зразок
       - run: POSTGRES_PASSWORD=ci docker compose config -q
       - run: POSTGRES_PASSWORD=ci docker compose build backend frontend

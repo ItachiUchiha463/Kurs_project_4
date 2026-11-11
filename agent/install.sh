@@ -87,8 +87,8 @@ echo "Встановлюю залежності..."
 if [ ! -x "$DIR/venv/bin/python" ]; then
   "$PY" -m venv "$DIR/venv" 2>/dev/null || { command -v apt-get >/dev/null && apt-get install -y -qq python3-venv >/dev/null && "$PY" -m venv "$DIR/venv"; } || die "не вдалося створити venv"
 fi
-EXTRA="psutil httpx"; "$PY" -c 'import sys; sys.exit(sys.version_info >= (3, 11))' && EXTRA="$EXTRA tomli"; [ "$POSTGRES" -eq 1 ] && EXTRA="$EXTRA psycopg[binary]"
-"$DIR/venv/bin/pip" install -q --disable-pip-version-check $EXTRA
+EXTRA=(psutil httpx); "$PY" -c 'import sys; sys.exit(sys.version_info >= (3, 11))' && EXTRA+=(tomli); [ "$POSTGRES" -eq 1 ] && EXTRA+=("psycopg[binary]")
+"$DIR/venv/bin/pip" install -q --disable-pip-version-check "${EXTRA[@]}"
 
 cat > "$DIR/app/agent.toml.new" <<EOF
 server   = "$SERVER"
