@@ -75,7 +75,15 @@ curl -fsSL https://raw.githubusercontent.com/ItachiUchiha463/Kurs_project_4/main
 
 Скрипт ставить Python (на Ubuntu/Debian), створює `/opt/vigil-agent`, пише `agent.toml` і запускає службу `vigil-agent`. Додаткові параметри: `--docker`, `--postgres`, `--interval`, `--no-service`; повторний запуск оновлює агента, `--uninstall` видаляє. Журнал: `journalctl -u vigil-agent -f`.
 
-Скрипт береться з гілки `main` на GitHub, тому репозиторій має бути запушений. Щоб зафіксувати версію, задайте тег: `sudo VIGIL_REF=v1.3 bash -s -- …` (за замовчуванням `main`). Потрібен Python 3.10+ (Ubuntu 22.04+, Debian 12+). Ручне встановлення (Windows або без systemd):
+Скрипт береться з гілки `main` на GitHub, тому репозиторій має бути запушений. Щоб зафіксувати версію, задайте тег: `sudo VIGIL_REF=v1.3 bash -s -- …` (за замовчуванням `main`). Потрібен Python 3.10+ (Ubuntu 22.04+, Debian 12+). **Windows.** У PowerShell від імені адміністратора (потрібен Python 3.10+ з python.org, з позначкою «Add python.exe to PATH»):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ItachiUchiha463/Kurs_project_4/main/agent/install.ps1))) -Server https://ВАША_АДРЕСА -Token vgl_... -HostName НАЗВА
+```
+
+Скрипт створює `C:\ProgramData\VigilAgent`, пише `agent.toml` (читати його можуть лише SYSTEM і адміністратори) і реєструє завдання Планувальника `VigilAgent` від імені SYSTEM: агент стартує під час завантаження Windows, ще до входу користувача, і перезапускається після падіння. Параметри: `-Interval`, `-Postgres`, `-NoTask`; повторний запуск оновлює агента, `-Uninstall` видаляє. Журнал: `Get-Content C:\ProgramData\VigilAgentgent.log -Wait`. Docker Desktop на Windows агент не підтримує (див. нижче).
+
+Ручне встановлення (без systemd чи Планувальника):
 
 
 ```bash

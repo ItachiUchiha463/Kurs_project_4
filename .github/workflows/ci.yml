@@ -66,6 +66,28 @@ jobs:
       - run: sudo /opt/vigil-agent/venv/bin/python -c "import tomllib; c = tomllib.load(open('/opt/vigil-agent/app/agent.toml', 'rb')); assert c['host'] == 'ci-host' and c['interval'] == 15"
       - run: sudo bash agent/install.sh --uninstall && test ! -e /opt/vigil-agent
 
+  installer-windows:
+    # install.ps1: агент як завдання Планувальника від SYSTEM; перевіряємо у Windows PowerShell 5.1, як у користувачів
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: .\agent\install.ps1 -SrcDir agent -Server https://vigil.test -Token vgl_ci -HostName ci-host
+      - run: |
+          $t = Get-ScheduledTask -TaskName VigilAgent
+          if ($t.Principal.UserId -ne 'SYSTEM') { throw "task runs as $($t.Principal.UserId)" }
+          $cfg = Join-Path $env:ProgramData 'VigilAgent\app\agent.toml'
+          & (Join-Path $env:ProgramData 'VigilAgent\venv\Scripts\python.exe') -c "import sys, tomllib; c = tomllib.load(open(sys.argv[1], 'rb')); assert c['host'] == 'ci-host' and c['interval'] == 15" $cfg
+          if ($LASTEXITCODE -ne 0) { throw 'agent.toml is wrong' }
+      - run: |
+          .\agent\install.ps1 -Uninstall
+          if (Get-ScheduledTask -TaskName VigilAgent -ErrorAction SilentlyContinue) { throw 'task left' }
+          if (Test-Path (Join-Path $env:ProgramData 'VigilAgent')) { throw 'folder left' }
+
   images:
     # Dockerfile'и й Compose ламаються тихо, доки їх не зберуть: краще дізнатися до деплою
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 import { conditionText } from '@/pages/settings/Rules'
-import { installCommand } from '@/pages/AddServer'
+import { installCommand, installCommandWindows } from '@/pages/AddServer'
 import { describe, expect, it } from 'vitest'
 
 import { forgotSchema, loginSchema, registerSchema, resetSchema, resolveSchema, targetSchema } from '@/forms/schemas'
@@ -88,5 +88,12 @@ describe('встановлення агента', () => {
     expect(cmd).toContain('/agent/install.sh | sudo bash -s --')
     expect(cmd).toContain("--token 'vgl_abc'")
     expect(cmd).toContain("--host 'web '\\''one'\\'''")
+  })
+
+  it('Windows: install.ps1, значення в одинарних лапках PowerShell', () => {
+    const cmd = installCommandWindows("web 'one'", 'vgl_abc', 'https://v.example.com')
+    expect(cmd).toContain('/agent/install.ps1')
+    expect(cmd).toContain("-Token 'vgl_abc'")
+    expect(cmd).toContain("-HostName 'web ''one'''")
   })
 })

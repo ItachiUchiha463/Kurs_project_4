@@ -27,6 +27,12 @@ const sh = (v: string) => `'${v.replaceAll("'", "'\\''")}'`  // значення
 export const installCommand = (host: string, token: string, origin = location.origin) =>
   `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/agent/install.sh | sudo bash -s -- --server ${sh(origin)} --token ${sh(token)} --host ${sh(host)}`
 
+const ps = (v: string) => `'${v.replaceAll("'", "''")}'`  // рядок PowerShell в одинарних лапках
+
+/** Те саме для Windows (PowerShell від адміністратора): агент стає завданням Планувальника від імені SYSTEM. */
+export const installCommandWindows = (host: string, token: string, origin = location.origin) =>
+  `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/${REPO}/main/agent/install.ps1))) -Server ${ps(origin)} -Token ${ps(token)} -HostName ${ps(host)}`
+
 const MANUAL = `git clone https://github.com/${REPO}.git
 cd Kurs_project_4/agent
 pip install psutil httpx
@@ -155,10 +161,17 @@ export function AddServerPage() {
 
       {step === 1 && created?.agent_token && (
         <section className="grid max-w-2xl gap-4 rounded-xl border bg-card p-5 shadow-sm">
-          <p>Виконайте одну команду на сервері <b>{created.name}</b> (Linux, від імені адміністратора). Скрипт встановить Python-залежності, збереже налаштування й запустить агента як службу.</p>
-          <CommandBlock>{installCommand(created.name, created.agent_token)}</CommandBlock>
+          <p>Виконайте одну команду на сервері <b>{created.name}</b> від імені адміністратора. Скрипт встановить Python-залежності, збереже налаштування й запустить агента у фоні з автозапуском.</p>
+          <div>
+            <h2 className="mb-1 text-sm font-semibold">Linux (термінал, sudo)</h2>
+            <CommandBlock>{installCommand(created.name, created.agent_token)}</CommandBlock>
+          </div>
+          <div>
+            <h2 className="mb-1 text-sm font-semibold">Windows (PowerShell від імені адміністратора, потрібен Python 3.10+ з python.org)</h2>
+            <CommandBlock>{installCommandWindows(created.name, created.agent_token)}</CommandBlock>
+          </div>
           <details className="text-sm">
-            <summary className="cursor-pointer font-medium">Windows або встановлення вручну</summary>
+            <summary className="cursor-pointer font-medium">Встановлення вручну</summary>
             <div className="mt-2 grid gap-3">
               <p className="text-muted-foreground">Потрібен Python 3.10 або новіший.</p>
               <div>
