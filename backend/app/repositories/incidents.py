@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import func
 
-from app.engine.defaults import SERVER_AVAILABILITY
+from app.engine.defaults import SERVER_DOWN
 from app.models import Diagnosis, Incident, IncidentEvent, Rule, Target
 
 LIVE = ("open", "acknowledged")
@@ -65,9 +65,9 @@ def add_event(db: AsyncSession, incident_id: int, type_: str, value=None, ts=Non
 
 
 async def server_down(db: AsyncSession, server_id: int) -> Incident | None:
-    """Відкритий інцидент недоступності сервера (agent_alive або ping_available), якщо є."""
+    """Відкритий інцидент недоступності сервера, підтвердженої ping (ping_available), якщо є."""
     return await db.scalar(select(Incident).where(
-        Incident.target_id == server_id, Incident.metric.in_(SERVER_AVAILABILITY), Incident.status.in_(LIVE)).order_by(Incident.id).limit(1))
+        Incident.target_id == server_id, Incident.metric.in_(SERVER_DOWN), Incident.status.in_(LIVE)).order_by(Incident.id).limit(1))
 
 
 async def suppressed_counts(db: AsyncSession, incident_ids: list[int]) -> dict[int, int]:

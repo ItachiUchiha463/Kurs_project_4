@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.defaults import AVAILABILITY_METRICS, SERVER_AVAILABILITY
+from app.engine.defaults import AGENT_SILENT, AVAILABILITY_METRICS, SERVER_DOWN
 from app.engine.thresholds import AGG_SQL, Deescalate, Escalate, Open, Resolve, State, Threshold, step
 from app.models import Incident, Target
 from app.repositories import incidents as repo
@@ -83,7 +83,7 @@ async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) 
         repo.add_event(db, inc.id, "detected", act.value, act.first_breach_at)
         repo.add_event(db, inc.id, "suppressed" if parent else "opened", act.value, ts)
         changes = [Change("suppressed" if parent else "opened", inc, target, act.value, ts)]
-        if target.type == "server" and key[1] in SERVER_AVAILABILITY:
+        if target.type == "server" and key[1] in SERVER_DOWN:
             for child in await suppress_children(db, inc, ts):
                 changes.append(Change("suppressed", child, await db.get(Target, child.target_id), child.value_at_open or 0.0, ts))
             await db.execute(update(Target).where(Target.host_id == target.id).values(status="unavailable"))  # «недоступний через сервер»
@@ -104,7 +104,7 @@ async def _apply(db: AsyncSession, target: Target, key: Key, act, ts: datetime) 
         inc.status, inc.resolved_at = "resolved", ts
         repo.add_event(db, inc.id, "resolved", act.value, ts, note="автоматично")
         changes = [Change("resolved", inc, target, act.value, ts)]
-        if target.type == "server" and key[1] in SERVER_AVAILABILITY:
+        if target.type == "server" and key[1] in SERVER_DOWN:
             changes += await release(db, target.id, ts)
         return changes
     return []
@@ -151,8 +151,10 @@ async def refresh_status(db: AsyncSession, target: Target, server_down: bool | N
     live = await repo.live_for_target(db, target.id)
     if server_down is None:
         server_down = bool(target.host_id and target.type != "server" and await repo.server_down(db, target.host_id))
-    if server_down or any(i.metric in AVAILABILITY_METRICS for i in live):
+    if server_down or any(i.metric in AVAILABILITY_METRICS and i.metric != AGENT_SILENT for i in live):
         target.status = "unavailable"
+    elif any(i.metric == AGENT_SILENT for i in live):  # агент мовчить, а ping збою не підтвердив: стан невідомий
+        target.status = "unknown"
     elif any(i.severity == "critical" for i in live):
         target.status = "critical"
     elif live:

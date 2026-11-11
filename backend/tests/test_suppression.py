@@ -1,24 +1,40 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
+from app.checks.http import CheckResult
 from app.db import SessionLocal
 from app.notify.policy import should_notify
 from app.services import checks, pipeline
 from tests.test_background import DOWN, age_breach, ping_agent, service, two_failed_checks
 from tests.test_incidents import incidents, server
+from tests.test_net_checks import run_ping
+
+DOWN = CheckResult(0, None, packet_loss=100.0)
+UP = CheckResult(1, 12.0, packet_loss=0.0)
+
+
+def age(srv, field):
+    """Зсуває початок порушення чи спокою ping на 31 с, щоб не чекати тривалість 30 с."""
+    key = (srv["id"], "ping_available", "")
+    st = pipeline._states[key]
+    pipeline._states[key] = replace(st, **{field: getattr(st, field) - timedelta(seconds=31)})
 
 
 async def server_goes_down(client, srv):
-    """Агент мовчить довше за 3 інтервали: інцидент agent_alive."""
+    """Ping не проходить довше за 30 секунд: недоступність сервера підтверджено, інцидент ping_available."""
     await ping_agent(client, srv)
-    async with SessionLocal() as db:
-        await checks.check_agents(db, datetime.now(timezone.utc) + timedelta(seconds=120))
-        await db.commit()
+    await run_ping(srv["id"], DOWN)
+    age(srv, "breach_since")
+    await run_ping(srv["id"], DOWN)
 
 
 async def server_returns(client, srv):
     await ping_agent(client, srv)
+    await run_ping(srv["id"], UP)
+    age(srv, "calm_since")
+    await run_ping(srv["id"], UP)
 
 
 async def all_incidents(client, h, **params):
@@ -29,7 +45,9 @@ async def all_incidents(client, h, **params):
 
 async def setup(client, user_factory):
     h = await user_factory()
-    srv = await server(client, h, "web-01", interval=15)
+    r = await client.post("/api/targets", json={"name": "web-01", "type": "server", "interval_s": 15, "ping_enabled": True,
+                                                "address": "web-01.example.com"}, headers=h)
+    srv = r.json()
     svc = await service(client, h, host_id=srv["id"])
     return h, srv, svc
 
@@ -39,7 +57,7 @@ async def test_child_incident_is_suppressed_while_server_is_down(client, user_fa
     await server_goes_down(client, srv)
     await two_failed_checks(svc["id"])
     opened = await incidents(client, h)
-    assert [i["metric"] for i in opened] == ["agent_alive"]  # у списку лише інцидент сервера
+    assert [i["metric"] for i in opened] == ["ping_available"]  # у списку лише інцидент сервера
     assert opened[0]["suppressed_count"] == 1
     suppressed = await all_incidents(client, h, status="suppressed")
     assert len(suppressed) == 1 and suppressed[0]["target_name"] == "shop" and suppressed[0]["suppressed_by"] == opened[0]["id"]
@@ -54,7 +72,7 @@ async def test_already_open_child_incident_is_suppressed_when_server_goes_down(c
     await two_failed_checks(svc["id"])
     assert [i["metric"] for i in await incidents(client, h)] == ["available"]
     await server_goes_down(client, srv)
-    assert [i["metric"] for i in await incidents(client, h)] == ["agent_alive"]
+    assert [i["metric"] for i in await incidents(client, h)] == ["ping_available"]
     assert len(await all_incidents(client, h, status="suppressed")) == 1
 
 
@@ -66,7 +84,7 @@ async def test_recovery_releases_children_and_they_are_evaluated_again(client, u
     assert await incidents(client, h, status="active") == []
     assert await all_incidents(client, h, status="suppressed") == []
     resolved = await all_incidents(client, h, status="resolved")
-    assert {i["metric"] for i in resolved} == {"agent_alive", "available"}  # сервер і придушений сервіс
+    assert {i["metric"] for i in resolved} == {"ping_available", "available"}  # сервер і придушений сервіс
     # сервіс і далі не працює: після звільнення відкривається вже звичайний інцидент зі своїм сповіщенням
     await two_failed_checks(svc["id"])
     opened = await incidents(client, h, status="active")
@@ -94,3 +112,17 @@ async def test_manual_close_of_server_incident_releases_children(client, user_fa
 def test_suppressed_changes_are_never_notified():
     for severity in ("warning", "critical"):
         assert not should_notify(chat_id=1, min_severity="warning", kind="suppressed", severity=severity, had_open_notification=False)
+
+
+async def test_silent_agent_without_ping_is_unknown_and_does_not_suppress(client, user_factory):
+    h = await user_factory()
+    srv = await server(client, h, "web-01", interval=15)  # ping не налаштовано: недоступність сервера не підтвердити
+    svc = await service(client, h, host_id=srv["id"])
+    await ping_agent(client, srv)
+    async with SessionLocal() as db:
+        await checks.check_agents(db, datetime.now(timezone.utc) + timedelta(seconds=120))
+        await db.commit()
+    assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "unknown"
+    await two_failed_checks(svc["id"])
+    assert {i["metric"] for i in await incidents(client, h)} == {"agent_alive", "available"}  # дочірній інцидент не придушено
+    assert await all_incidents(client, h, status="suppressed") == []

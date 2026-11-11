@@ -115,7 +115,7 @@ async def test_silent_agent_is_marked_dead_and_revives(client, user_factory):
         await db.commit()
     [inc] = await incidents(client, h)
     assert inc["metric"] == "agent_alive" and inc["severity"] == "critical"
-    assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "unavailable"
+    assert (await client.get(f"/api/targets/{srv['id']}", headers=h)).json()["status"] == "unknown"  # ping збою не підтвердив
     d = (await client.get(f"/api/incidents/{inc['id']}", headers=h)).json()["diagnosis"]
     assert d["cause"].startswith("Сервер вимкнений")
     await ping_agent(client, srv)  # агент повернувся
