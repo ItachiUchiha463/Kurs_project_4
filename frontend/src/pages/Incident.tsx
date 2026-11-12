@@ -110,13 +110,30 @@ export function IncidentPage() {
                   </div>
                 )}
                 {d.alternatives.map((a, k) => (
-                  <p key={k} className="flex justify-between border-t p-3 px-4 text-sm text-muted-foreground">
-                    <span>Можлива причина: {a.name}</span><span className="num">{a.ok} з {a.total} умов</span>
-                  </p>
+                  <details key={k} className="border-t p-3 px-4 text-sm text-muted-foreground">
+                    <summary className="flex cursor-pointer justify-between gap-3">
+                      <span>Можлива причина: {a.name}</span>
+                      <span className="num whitespace-nowrap">збіг {a.pct ?? Math.round((100 * a.ok) / a.total)} % ({a.ok} з {a.total} умов)</span>
+                    </summary>
+                    {a.missing && a.missing.length > 0 && (
+                      <div className="mt-2">
+                        <p className="font-medium text-foreground">Чому не вона: ці умови не виконано</p>
+                        <ul className="mt-1 grid gap-1">
+                          {a.missing.map((m, i) => <li key={i} className="flex gap-3"><span>{m.text}</span><span className="num ml-auto whitespace-nowrap">{m.value}</span></li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </details>
                 ))}
               </>
             )}
           </section>
+          {(d?.context ?? []).length > 0 && (
+            <section aria-label="Що було поруч" className="rounded-xl border bg-card p-4 shadow-sm">
+              <h2 className="mb-2 font-semibold">Що було поруч у цей час</h2>
+              <ul className="grid gap-1 text-sm">{d!.context!.map((c, i) => <li key={i}>• {c}</li>)}</ul>
+            </section>
+          )}
           <MetricChart targetId={inc.target_id} metric={inc.metric} instance={inc.instance} range="1h" title={`${metricLabel(inc.metric, inc.instance)} за останню годину`} />
         </div>
 

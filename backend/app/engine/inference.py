@@ -18,13 +18,16 @@ METRIC_LABELS = {
     "agent_alive": "Агент працює", "status_code": "HTTP-код", "net_total": "Мережа",
     "ping_available": "Ping", "packet_loss": "Втрати пакетів",
     "container_running": "Контейнер працює", "container_oom_killed": "Нестача пам'яті (OOM)", "container_exit_code": "Код виходу",
+    "ram_available_mb": "Вільна RAM", "uptime_h": "Час роботи сервера", "cpu_iowait": "CPU чекає диск", "cpu_steal": "CPU забирає хост",
+    "inode_usage": "Заповненість inode", "disk_read": "Читання диска", "disk_write": "Запис на диск",
     "container_health": "Healthcheck", "container_restarts": "Перезапуски", "container_cpu": "CPU контейнера", "container_mem": "RAM контейнера",
     "db_up": "База даних доступна", "db_connections_pct": "З'єднання, % від максимуму", "db_idle_in_tx": "Транзакції idle in transaction",
     "db_longest_query_s": "Найдовший запит", "db_locks_waiting": "Запити, що чекають блокування", "db_cache_hit_pct": "Влучання в кеш",
 }
-UNITS = {"cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%", "container_cpu": "%", "container_mem": "%",
+UNITS = {"ram_available_mb": "МБ", "uptime_h": "год", "cpu_iowait": "%", "cpu_steal": "%", "inode_usage": "%", "disk_read": "КБ/с", "disk_write": "КБ/с",
+         "cpu_usage": "%", "ram_usage": "%", "swap_usage": "%", "disk_usage": "%", "response_ms": "мс", "net_total": "КБ/с", "packet_loss": "%", "container_cpu": "%", "container_mem": "%",
          "db_connections_pct": "%", "db_cache_hit_pct": "%", "db_longest_query_s": "с"}
-AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум", "delta": "приріст"}
+AGG_TEXT = {"avg": "середнє", "max": "максимум", "min": "мінімум", "delta": "приріст", "slope": "зміна за годину"}
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,8 @@ def _describe(c: Condition, names: dict[str, str]) -> str:
     who = names[c.scope] + (f" ({c.sibling_type})" if c.scope == "siblings" else "")
     label = METRIC_LABELS.get(c.metric, c.metric)
     window = f", {AGG_TEXT[c.agg]} за {c.window_s // 60} хв" if c.agg != "last" and c.window_s else ""
+    if c.agg == "slope":
+        window = f", {AGG_TEXT[c.agg]} (за останні {c.window_s // 60} хв)"
     return f"{label} {who}{window}"
 
 
@@ -92,6 +97,8 @@ def evaluate(rule: Rule, facts: dict[tuple, float | list[float] | None], names: 
     for c in rule.conditions:
         actual = facts.get(c.fact_key)
         unit = f" {UNITS[c.metric]}" if c.metric in UNITS else ""
+        if c.agg == "slope":
+            unit += "/год"
         if actual is None or actual == []:
             evidence.append(Evidence(False, _describe(c, names), "немає даних"))
             continue

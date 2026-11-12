@@ -159,3 +159,41 @@ async def test_user_can_only_link_service_to_own_server(client, user_factory):
     assert (await client.post("/api/targets", json=body, headers=b)).status_code == 404
     ok = await client.post("/api/targets", json=body, headers=a)
     assert ok.status_code == 201 and ok.json()["host_id"] == sa["id"]
+
+
+async def test_growing_ram_gets_trend_diagnosis(client, user_factory):
+    h = await user_factory()
+    t = await server(client, h)
+    for value, ago in ((60, 3000), (70, 2400), (78, 1800), (84, 1200)):  # ще нижче порогу: інцидент не відкривається
+        await push(client, t["agent_token"], "ram_usage", value, ago_s=ago)
+    assert await incidents(client, h) == []
+    await push(client, t["agent_token"], "ram_usage", 90, ago_s=100)
+    [inc] = await incidents(client, h)
+    d = (await client.get(f"/api/incidents/{inc['id']}", headers=h)).json()["diagnosis"]
+    assert d["cause"].startswith("Використання пам'яті стабільно росте")
+    assert any("зміна за годину" in e["text"] and e["ok"] and "%/год" in e["value"] for e in d["evidence"])
+
+
+async def test_diagnosis_context_mentions_reboot_and_earlier_incident(client, user_factory):
+    h = await user_factory()
+    t = await server(client, h)
+    await push(client, t["agent_token"], "uptime_h", 0.1, ago_s=300)  # 6 хв після завантаження
+    await push(client, t["agent_token"], "cpu_usage", 97, ago_s=200)
+    await push(client, t["agent_token"], "ram_usage", 97, ago_s=100)
+    cpu, ram = sorted(await incidents(client, h), key=lambda i: i["id"])
+    ctx = (await client.get(f"/api/incidents/{ram['id']}", headers=h)).json()["diagnosis"]["context"]
+    assert any("перезавантажено близько 6 хв тому" in c for c in ctx)
+    assert any("почався інцидент" in c and "CPU" in c for c in ctx)
+    first = (await client.get(f"/api/incidents/{cpu['id']}", headers=h)).json()["diagnosis"]["context"]
+    assert not any("почався інцидент" in c for c in first)  # раніше за нього інцидентів не було
+
+
+async def test_alternatives_show_percent_and_missing_conditions(client, user_factory):
+    h = await user_factory()
+    t = await server(client, h)
+    await push(client, t["agent_token"], "ram_usage", 97, ago_s=100)  # swap невідомий: правило «Нестача RAM» виконано наполовину
+    [inc] = await incidents(client, h)
+    alts = (await client.get(f"/api/incidents/{inc['id']}", headers=h)).json()["diagnosis"]["alternatives"]
+    shortage = next(a for a in alts if a["name"] == "Нестача оперативної пам'яті")
+    assert shortage["pct"] == 50 and shortage["ok"] == 1 and shortage["total"] == 2
+    assert shortage["missing"] == [{"text": "Swap web-01", "value": "немає даних"}]

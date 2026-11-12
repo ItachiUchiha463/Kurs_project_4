@@ -16,6 +16,7 @@ os.environ["DATABASE_URL"] = TEST_URL
 os.environ["JWT_SECRET"] = "test-secret-at-least-32-bytes-long-0000"
 os.environ["REGISTRATION_MODE"] = "open"
 os.environ["INGEST_MIN_INTERVAL_S"] = "0"
+os.environ["SMTP_HOST"] = ""  # тести не повинні слати справжні листи, навіть якщо в .env налаштовано SMTP
 
 
 def _dsn(url: str, db: str) -> str:

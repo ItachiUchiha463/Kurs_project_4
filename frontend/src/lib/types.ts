@@ -57,7 +57,8 @@ export interface Diagnosis {
   recommendation: string
   matched_ratio: number
   evidence: Evidence[]
-  alternatives: { name: string; ok: number; total: number }[]
+  alternatives: { name: string; ok: number; total: number; pct?: number; missing?: { text: string; value: string }[] }[]
+  context?: string[]
 }
 export interface IncidentDetail extends Incident {
   events: IncidentEvent[]
@@ -127,7 +128,7 @@ export interface RuleCondition {
   metric: string
   op: string
   value: number
-  agg: 'last' | 'avg' | 'max' | 'min' | 'delta'
+  agg: 'last' | 'avg' | 'max' | 'min' | 'delta' | 'slope'
   window_s: number
   instance: string | null
   sibling_type: 'container' | 'database' | 'service' | null

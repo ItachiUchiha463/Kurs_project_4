@@ -7,6 +7,7 @@ DEFAULT_THRESHOLDS: dict[str, Threshold] = {t.metric: t for t in [
     _T("ram_usage", "avg", 120, warn=85, crit=95, duration_s=0),
     _T("load_per_core", "avg", 300, warn=1.5, crit=3, duration_s=0),
     _T("disk_usage", "last", 0, warn=85, crit=95, duration_s=60),
+    _T("inode_usage", "last", 0, warn=85, crit=95, duration_s=60),  # диск «повний» при вільному місці: закінчилися inode
     _T("response_ms", "avg", 60, warn=1000, crit=3000, duration_s=0),
     _T("packet_loss", "avg", 60, warn=10, crit=50, duration_s=0),
     # бінарні метрики: лише crit, без гістерезису

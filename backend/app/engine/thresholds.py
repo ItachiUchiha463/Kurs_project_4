@@ -8,7 +8,8 @@ from typing import Literal
 
 Severity = Literal["warning", "critical"]
 Direction = Literal["above", "below", "equals"]
-AGG_SQL = {"avg": "avg(value)", "max": "max(value)", "min": "min(value)", "delta": "(max(value) - min(value))"}  # агрегати за вікно в SQL
+AGG_SQL = {"avg": "avg(value)", "max": "max(value)", "min": "min(value)", "delta": "(max(value) - min(value))",
+           "slope": "regr_slope(value, extract(epoch FROM ts)) * 3600"}  # slope – зміна за годину за вікно (лінійна регресія); потрібні щонайменше 2 точки
 HYSTERESIS = 0.05  # закриття після повернення за поріг ще на 5 % (ТЗ 7.1)
 
 

@@ -48,7 +48,8 @@ def diagnosis_out(row) -> DiagnosisOut | None:
     d, rule = row
     return DiagnosisOut(
         cause=rule.cause if rule else NO_CAUSE, recommendation=rule.recommendation if rule else NO_CAUSE_HINT,
-        matched_ratio=d.matched_ratio, evidence=d.evidence, alternatives=d.alternatives)
+        matched_ratio=d.matched_ratio, evidence=d.evidence, alternatives=d.alternatives,
+        context=d.context or [])
 
 
 async def acknowledge(db: AsyncSession, user: User, incident_id: int) -> IncidentOut:

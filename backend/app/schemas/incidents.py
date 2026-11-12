@@ -43,6 +43,7 @@ class DiagnosisOut(BaseModel):
     matched_ratio: float
     evidence: list[EvidenceItem]
     alternatives: list[dict] = []
+    context: list[str] = []  # що відбувалося поруч у цей час: перезавантаження, інші інциденти на сервері
 
 
 class IncidentDetail(IncidentOut):

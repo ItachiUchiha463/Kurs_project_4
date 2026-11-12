@@ -91,3 +91,38 @@ def test_siblings_conditions_any_and_all():
     assert evaluate(rule("all"), {key: [0.0, 0.0]}, names).ratio == 1.0
     no_data = evaluate(rule("any"), {key: []}, names)
     assert no_data.ratio == 0.0 and no_data.evidence[0].value == "немає даних"
+
+
+def _base(name):
+    return next(r for r in _as_rules() if r.name == name)
+
+
+def test_slope_evidence_has_per_hour_unit_and_trend_rule_wins_over_plain_shortage():
+    leak, shortage = _base("Пам'ять росте без зупинки"), _base("Нестача оперативної пам'яті")
+    facts_ = {("self", "ram_usage", "avg", 300, None, None): 92.0, ("self", "ram_usage", "slope", 3600, None, None): 4.2,
+              ("self", "swap_usage", "last", 0, None, None): 60.0}
+    d = diagnose([leak, shortage], facts_, {"self": "web-01"}, "server")
+    assert d.primary.rule.name == leak.name and [m.rule.name for m in d.alternatives] == [shortage.name]
+    slope = next(e for e in d.primary.evidence if "зміна за годину" in e.text)
+    assert slope.value == "4,2 %/год > 1 %/год"
+
+
+def test_reboot_rule_beats_plain_stopped_service_and_ping_variant():
+    reboot = _base("Сервіс не відповідає після перезавантаження сервера")
+    plain, ping = _base("Сервіс зупинено, сервер працює"), _base("Сервіс зупинено, сервер відповідає на ping")
+    f = {("self", "available", "last", 0, None, None): 0.0, ("host", "agent_alive", "last", 0, None, None): 1.0,
+         ("host", "uptime_h", "last", 0, None, None): 0.1, ("host", "ping_available", "last", 0, None, None): 1.0}
+    d = diagnose([plain, ping, reboot], f, {"self": "shop", "host": "web-01"}, "service")
+    assert d.primary.rule.name == reboot.name
+    f[("host", "uptime_h", "last", 0, None, None)] = 500.0  # давно працює: звичайна зупинка сервісу
+    assert diagnose([plain, ping, reboot], f, {"self": "shop", "host": "web-01"}, "service").primary.rule.name == ping.name
+
+
+def test_iowait_rule_is_more_specific_than_generic_io_rule():
+    new, old = _base("Очікування вводу-виводу: диск не встигає"), _base("Очікування вводу-виводу")
+    f = {("self", "load_per_core", "avg", 300, None, None): 3.0, ("self", "cpu_usage", "avg", 300, None, None): 20.0,
+         ("self", "cpu_iowait", "avg", 300, None, None): 45.0}
+    d = diagnose([old, new], f, {"self": "web-01"}, "server")
+    assert d.primary.rule.name == new.name
+    f[("self", "cpu_iowait", "avg", 300, None, None)] = 2.0  # iowait низький: лишається загальне правило
+    assert diagnose([old, new], f, {"self": "web-01"}, "server").primary.rule.name == old.name

@@ -95,6 +95,38 @@ async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target
     diagnosis.rule_id = primary.rule.id if primary else None
     diagnosis.matched_ratio = primary.ratio if primary else 0.0
     diagnosis.evidence = [vars(e) for e in primary.evidence] if primary else []
-    diagnosis.alternatives = [{"name": m.rule.cause, "ok": sum(e.ok for e in m.evidence), "total": len(m.evidence)}
-                              for m in result.alternatives[:3]]
+    diagnosis.alternatives = [alternative(m) for m in result.alternatives[:3]]
+    diagnosis.context = await context_notes(db, incident, target, ref)
     return diagnosis
+
+
+def alternative(m: inference.Match) -> dict:
+    """Можлива причина: відсоток збігу й умови, які не виконалися (відповідь на «чому не ця причина»)."""
+    ok = sum(e.ok for e in m.evidence)
+    return {"name": m.rule.cause, "ok": ok, "total": len(m.evidence), "pct": round(100 * m.ratio),
+            "missing": [{"text": e.text, "value": e.value} for e in m.evidence if not e.ok]}
+
+
+CONTEXT_WINDOW = timedelta(minutes=15)
+
+
+async def context_notes(db: AsyncSession, incident: Incident, target: Target, ref: datetime) -> list[str]:
+    """Що змінилося поруч перед збоєм: недавнє перезавантаження сервера й інциденти на тому ж сервері за 15 хв до цього."""
+    host = await host_of(db, target)
+    if host is None:
+        return []
+    notes: list[str] = []
+    uptime = await db.scalar(text("""SELECT value FROM metrics WHERE target_id = :t AND name = 'uptime_h' AND instance = ''
+                                     AND ts <= :ref AND ts > :since ORDER BY ts DESC LIMIT 1"""),
+                             {"t": host.id, "ref": ref, "since": ref - LAST_LOOKBACK})
+    if uptime is not None and uptime < 1:
+        notes.append(f"Сервер «{host.name}» перезавантажено близько {max(1, round(uptime * 60))} хв тому")
+    earlier = await db.execute(
+        select(Incident, Target.name).join(Target, Target.id == Incident.target_id)
+        .where(Incident.owner_id == target.owner_id, Incident.id != incident.id, or_(Target.id == host.id, Target.host_id == host.id),
+               Incident.started_at < incident.started_at, Incident.started_at >= incident.started_at - CONTEXT_WINDOW)
+        .order_by(Incident.started_at).limit(3))
+    for other, name in earlier:
+        label = inference.METRIC_LABELS.get(other.metric, other.metric) + (f" ({other.instance})" if other.instance else "")
+        notes.append(f"За {max(1, round((incident.started_at - other.started_at).total_seconds() / 60))} хв до цього почався інцидент: «{name}: {label}»")
+    return notes

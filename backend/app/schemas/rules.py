@@ -14,7 +14,7 @@ class ConditionModel(BaseModel):
     metric: str
     op: Literal[">", ">=", "<", "<=", "=="]
     value: float = Field(ge=-1_000_000_000, le=1_000_000_000)
-    agg: Literal["last", "avg", "max", "min", "delta"] = "last"
+    agg: Literal["last", "avg", "max", "min", "delta", "slope"] = "last"
     window_s: int = Field(default=0, ge=0, le=3600)
     instance: str | None = Field(default=None, max_length=100)  # None, "any", "same" або конкретне значення
     sibling_type: Literal["container", "database", "service"] | None = None

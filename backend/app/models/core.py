@@ -143,6 +143,7 @@ class Diagnosis(Base):
     matched_ratio: Mapped[float] = mapped_column(Float, default=0)
     evidence: Mapped[list] = mapped_column(JSONB, default=list)
     alternatives: Mapped[list] = mapped_column(JSONB, default=list)
+    context: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
