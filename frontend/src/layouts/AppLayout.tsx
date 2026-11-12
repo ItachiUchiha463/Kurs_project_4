@@ -1,4 +1,4 @@
-import { Activity, FileBarChart, LayoutDashboard, LogOut, Menu, Settings, TriangleAlert, UserRound } from 'lucide-react'
+import { Activity, CircleHelp, FileBarChart, LayoutDashboard, LogOut, Menu, Settings, TriangleAlert, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -87,6 +87,7 @@ function AppLayout() {
         <NavLink to="/reports" className={link}><FileBarChart className="size-5" aria-hidden="true" />Звіти</NavLink>
         <NavLink to="/settings" className={link}><Settings className="size-5" aria-hidden="true" />Налаштування</NavLink>
         <NavLink to="/profile" className={link}><UserRound className="size-5" aria-hidden="true" />Профіль</NavLink>
+        <NavLink to="/faq" className={link}><CircleHelp className="size-5" aria-hidden="true" />Питання й відповіді</NavLink>
         <Button variant="ghost" className="mt-2 justify-start gap-3 px-3 text-muted-foreground" onClick={logout}>
           <LogOut aria-hidden="true" />Вийти
         </Button>
@@ -96,9 +97,11 @@ function AppLayout() {
         <div className="flex items-center justify-end gap-3">
           <LiveIndicator />
           <ThemeToggle />
-          <span className="grid size-9 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-foreground" title={me.data?.email}>
+          <NavLink to="/profile" aria-label="Профіль" title={me.data?.email}
+            className={({ isActive }) => cn('grid size-9 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-foreground transition hover:ring-2 hover:ring-primary/40 focus-visible:ring-2 focus-visible:ring-ring',
+              isActive && 'ring-2 ring-primary')}>
             {me.data?.full_name.slice(0, 2).toUpperCase() ?? '…'}
-          </span>
+          </NavLink>
         </div>
         <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-col gap-5 outline-none">
           <Outlet />

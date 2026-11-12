@@ -26,7 +26,8 @@ export function MetricChart({ targetId, metric, instance = '', range, title }: P
   const summary = values.length
     ? `за період: мін ${num(Math.min(...values))}, макс ${num(Math.max(...values))}, зараз ${num(values[values.length - 1])}${unit ? ' ' + unit : ''}`
     : 'за цей період даних немає'
-  const over = meta?.crit != null && values.some((v) => v > meta.crit!)
+  const below = eff?.direction === 'below'  // кеш: погано, коли значення падає нижче порогу, а не росте вище
+  const over = meta?.crit != null && values.some((v) => (below ? v < meta.crit! : v > meta.crit!))
 
   return (
     <figure className="rounded-xl border bg-card p-4 shadow-sm" aria-label={`${label}: ${summary}`}>
@@ -57,7 +58,7 @@ export function MetricChart({ targetId, metric, instance = '', range, title }: P
           </ResponsiveContainer>
         </div>
       )}
-      <p className="mt-2 text-xs text-muted-foreground">{summary}{over ? ', було вище критичного порогу' : ''}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{summary}{over ? `, було ${below ? 'нижче' : 'вище'} критичного порогу` : ''}</p>
     </figure>
   )
 }

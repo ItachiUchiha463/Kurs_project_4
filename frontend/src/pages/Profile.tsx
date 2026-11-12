@@ -57,7 +57,7 @@ export function ProfilePage() {
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">Без Telegram Vigil покаже збої лише у вебінтерфейсі. Прив’язка потрібна й для відновлення пароля.</p>
+            <p className="text-sm text-muted-foreground">Без Telegram Vigil покаже збої лише у вебінтерфейсі. Telegram також отримує посилання для скидання пароля.</p>
             <Button className="w-fit" onClick={() => act(async () => setLink(await api<TelegramLink>('/me/telegram', { method: 'POST' })))}>Підключити Telegram</Button>
           </>
         )}

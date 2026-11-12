@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 export const agentConfig = (host: string, token: string) =>
   `server   = "${location.origin}"\ntoken    = "${token}"\nhost     = "${host}"\ninterval = 15`
 
-const REPO = 'ItachiUchiha463/Kurs_project_4'
+export const REPO = 'ItachiUchiha463/Kurs_project_4'
 const sh = (v: string) => `'${v.replaceAll("'", "'\\''")}'`  // значення в одинарних лапках: назва об'єкта може містити пробіли й спецсимволи
 
 /** Команда в один рядок для Linux: скрипт сам ставить залежності, пише agent.toml і створює службу systemd. */
