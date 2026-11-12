@@ -24,8 +24,8 @@ export const REPO = 'ItachiUchiha463/Kurs_project_4'
 const sh = (v: string) => `'${v.replaceAll("'", "'\\''")}'`  // значення в одинарних лапках: назва об'єкта може містити пробіли й спецсимволи
 
 /** Команда в один рядок для Linux: скрипт сам ставить залежності, пише agent.toml і створює службу systemd. */
-export const installCommand = (host: string, token: string, origin = location.origin) =>
-  `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/agent/install.sh | sudo bash -s -- --server ${sh(origin)} --token ${sh(token)} --host ${sh(host)}`
+export const installCommand = (host: string, token: string, origin = location.origin, docker = false) =>
+  `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/agent/install.sh | sudo bash -s -- --server ${sh(origin)} --token ${sh(token)} --host ${sh(host)}${docker ? ' --docker' : ''}`
 
 const ps = (v: string) => `'${v.replaceAll("'", "''")}'`  // рядок PowerShell в одинарних лапках
 
@@ -78,6 +78,7 @@ export function AddServerPage() {
   const servers = useTargets()
   const [created, setCreated] = useState<TargetCreated | null>(null)
   const [step, setStep] = useState(0)
+  const [docker, setDocker] = useState(false)  // лише Linux: агент сам виявить контейнери цього сервера
   const { register, handleSubmit, watch, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof targetSchema>>({
     resolver: zodResolver(targetSchema), defaultValues: { type: 'server', name: '', check_type: 'http', ping_enabled: false },
   })
@@ -164,7 +165,11 @@ export function AddServerPage() {
           <p>Виконайте одну команду на сервері <b>{created.name}</b> від імені адміністратора. Скрипт встановить Python-залежності, збереже налаштування й запустить агента у фоні з автозапуском.</p>
           <div>
             <h2 className="mb-1 text-sm font-semibold">Linux (термінал, sudo)</h2>
-            <CommandBlock>{installCommand(created.name, created.agent_token)}</CommandBlock>
+            <label className="mb-2 flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={docker} onChange={(e) => setDocker(e.target.checked)} />
+              <span><b>Моніторити Docker-контейнери</b><br /><span className="text-muted-foreground">Агент сам знайде контейнери цього сервера й покаже їх на сторінці сервера. Доступ лише для читання, потрібен встановлений Docker. На Windows не підтримується.</span></span>
+            </label>
+            <CommandBlock>{installCommand(created.name, created.agent_token, location.origin, docker)}</CommandBlock>
           </div>
           <div>
             <h2 className="mb-1 text-sm font-semibold">Windows (PowerShell від імені адміністратора, потрібен Python 3.10+ з python.org)</h2>

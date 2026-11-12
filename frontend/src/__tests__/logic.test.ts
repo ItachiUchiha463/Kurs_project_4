@@ -90,6 +90,11 @@ describe('встановлення агента', () => {
     expect(cmd).toContain("--host 'web '\\''one'\\'''")
   })
 
+  it('з перемикачем Docker команда для Linux отримує --docker, без нього ні', () => {
+    expect(installCommand('web-01', 'vgl_abc', 'https://v.example.com', true)).toMatch(/ --docker$/)
+    expect(installCommand('web-01', 'vgl_abc', 'https://v.example.com')).not.toContain('--docker')
+  })
+
   it('Windows: install.ps1, значення в одинарних лапках PowerShell', () => {
     const cmd = installCommandWindows("web 'one'", 'vgl_abc', 'https://v.example.com')
     expect(cmd).toContain('/agent/install.ps1')
