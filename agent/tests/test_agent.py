@@ -3,14 +3,15 @@ import httpx
 from agent import MAX_BUFFERED, Sender, make_batch
 from collectors.system import SystemCollector
 
-PERCENT = {"cpu_usage", "ram_usage", "swap_usage", "disk_usage"}
+PERCENT = {"cpu_usage", "ram_usage", "swap_usage", "disk_usage", "inode_usage", "cpu_iowait", "cpu_steal"}
 
 
 def test_collector_returns_known_valid_metrics():
     c = SystemCollector()
     samples = c.collect()
     names = {m for m, _, _ in samples}
-    assert {"cpu_usage", "ram_usage", "swap_usage", "process_count", "cpu_cores", "net_total", "disk_usage"} <= names
+    assert {"cpu_usage", "ram_usage", "swap_usage", "process_count", "cpu_cores", "net_total", "disk_usage",
+            "ram_available_mb", "uptime_h"} <= names
     for metric, _, value in samples:
         assert value >= 0, metric
         if metric in PERCENT:

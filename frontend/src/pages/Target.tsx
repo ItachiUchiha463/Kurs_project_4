@@ -27,6 +27,11 @@ function chartsFor(t: Target, disks: string[]): ChartSpec[] {
         { metric: 'cpu_usage' }, { metric: 'ram_usage' },
         ...disks.map((d) => ({ metric: 'disk_usage', instance: d, title: `Заповненість диска ${d}` })),
         { metric: 'net_total' },
+        ...on('disk_read' in t.latest, { metric: 'disk_read' }),
+        ...on('disk_write' in t.latest, { metric: 'disk_write' }),
+        ...on('ram_available_mb' in t.latest, { metric: 'ram_available_mb' }),
+        ...on('cpu_iowait' in t.latest, { metric: 'cpu_iowait' }),
+        ...on('uptime_h' in t.latest, { metric: 'uptime_h' }),
         ...on('load_per_core' in t.latest, { metric: 'load_per_core' }),
         ...on(t.ping_enabled, { metric: 'ping_ms' }),
       ]
@@ -158,7 +163,7 @@ export function TargetPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Видалити «{target.name}»?</DialogTitle>
-            <DialogDescription>{target.type === 'server' ? 'Разом із сервером видаляться його метрики та інциденти; пов’язані сервіси залишаться, але втратять прив’язку. ' : 'Разом з об’єктом видаляться його метрики та інциденти. '}Це не можна скасувати.</DialogDescription>
+            <DialogDescription>{target.type === 'server' ? 'Разом із сервером видаляться його метрики та інциденти, а також виявлені контейнери й бази даних. Сервіси, додані вручну, залишаться, але втратять прив’язку до сервера. ' : 'Разом з об’єктом видаляться його метрики та інциденти. '}Це не можна скасувати.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>Скасувати</Button>

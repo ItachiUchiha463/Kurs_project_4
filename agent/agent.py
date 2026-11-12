@@ -17,7 +17,7 @@ from collectors.docker import DockerCollector, client_for
 from collectors.postgres import PostgresCollector
 from collectors.system import SystemCollector
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 MAX_RECORDS = 2000  # ліміт сервісу на один запит
 MAX_BUFFERED = 100  # пакетів, що чекають, поки відновиться зв'язок
 UNAUTHORIZED_PAUSE_S = 300  # неправильний токен: не засипаємо сервер запитами
