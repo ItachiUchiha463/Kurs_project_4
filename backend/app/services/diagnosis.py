@@ -1,4 +1,14 @@
-"""Збір фактів для рушія виведення й збереження діагнозу (ТЗ розд. 8.2)."""
+"""Збір фактів для рушія виведення й збереження діагнозу (ТЗ розд. 8.2).
+
+Ядро виведення (engine/inference.py) – чисті функції: воно не знає про БД. Цей файл – «міст» між ядром і БД:
+  1. active_rules   – які правила діють для цього користувача (базові й власні, мінус вимкнені);
+  2. collect_facts  – для кожної умови кожного правила дістати з БД фактичне значення метрики;
+  3. diagnose_incident – віддати правила й факти ядру, а результат зберегти в таблицю diagnoses;
+  4. context_notes  – додати «що було поруч»: перезавантаження сервера, інциденти перед збоєм.
+
+Викликається з services/pipeline.py, коли інцидент відкрито або підвищено, і з services/rules.py
+(кнопка «Перевірити правило на об'єкті»).
+"""
 from datetime import datetime, timedelta
 
 from sqlalchemy import and_, or_, select, text
@@ -11,26 +21,37 @@ from app.models import Diagnosis, Incident, Rule, RuleOverride, Target
 
 NO_CAUSE = "Причину не визначено"
 NO_CAUSE_HINT = "Перегляньте графіки метрик за час інциденту."
+# Для умов «останнє значення» шукаємо точку не старшу за 15 хвилин до моменту інциденту.
 LAST_LOOKBACK = timedelta(minutes=15)
 
 
 def to_engine_rule(r: Rule) -> inference.Rule:
+    """Рядок таблиці rules (ORM) -> об'єкт для ядра. Умови зберігаються в БД як JSON, тут стають об'єктами Condition."""
     return inference.Rule(r.id, r.name, r.cause, r.recommendation, tuple(r.applies_to),
                           tuple(Condition(**c) for c in r.conditions), r.priority, own=r.owner_id is not None)
 
 
 async def _fact(db: AsyncSession, target_id: int, c: Condition, incident_instance: str, ref: datetime) -> float | None:
+    """Одне фактичне значення для умови: останнє або агрегат за вікно, на момент `ref`. None – даних немає.
+
+    instance умови визначає, який саме ряд брати:
+      "same" – той, що в інциденті (наприклад, інцидент на диску «/» -> умова теж про «/»);
+      "any"  – найгірший (максимальний) серед усіх рядів метрики (наприклад, найзаповненіший диск);
+      інше   – конкретне значення; порожнє – ряд без instance.
+    """
     params = {"t": target_id, "n": c.metric, "ref": ref}
     inst = incident_instance if c.instance == "same" else (c.instance or "")  # конкретне значення (наприклад, «/») береться як є
     where_inst = "" if c.instance == "any" else "AND instance = :i"
     if c.instance != "any":
         params["i"] = inst
     if c.agg == "last":
+        # Для кожного instance беремо останню точку (DISTINCT ON), а з них – найбільшу.
         params["since"] = ref - LAST_LOOKBACK
         sql = f"""SELECT max(v) FROM (SELECT DISTINCT ON (instance) value AS v FROM metrics
                   WHERE target_id = :t AND name = :n {where_inst} AND ts <= :ref AND ts > :since
                   ORDER BY instance, ts DESC) x"""
     else:
+        # Агрегат за вікно: avg / max / min / delta / slope (вирази зі словника AGG_SQL, не від користувача).
         params["since"] = ref - timedelta(seconds=c.window_s)
         sql = f"""SELECT {AGG_SQL[c.agg]} FROM metrics
                   WHERE target_id = :t AND name = :n {where_inst} AND ts <= :ref AND ts > :since"""
@@ -41,6 +62,7 @@ async def _sibling_values(db: AsyncSession, target: Target, c: Condition, incide
     """Значення метрики в усіх сусідніх об'єктів одного сервера (без самого об'єкта)."""
     if target.host_id is None:
         return []
+    # Сусіди: ті, що працюють на тому ж сервері, мають потрібний тип і того самого власника (ізоляція даних!).
     ids = await db.scalars(select(Target.id).where(
         Target.host_id == target.host_id, Target.owner_id == target.owner_id, Target.type == c.sibling_type,
         Target.id != target.id, Target.hidden.is_(False)))
@@ -49,6 +71,7 @@ async def _sibling_values(db: AsyncSession, target: Target, c: Condition, incide
 
 
 async def host_of(db: AsyncSession, target: Target) -> Target | None:
+    """Сервер, на якому працює об'єкт. Для самого сервера – він сам; для сервісу без прив'язки – None."""
     if target.type == "server":
         return target
     if target.host_id is None:
@@ -58,6 +81,7 @@ async def host_of(db: AsyncSession, target: Target) -> Target | None:
 
 async def active_rules(db: AsyncSession, owner_id: int, target_type: str) -> list[inference.Rule]:
     """Базові й власні правила, що діють для цього користувача: базові можна вимкнути (rule_overrides), власні – полем enabled."""
+    # Беремо базові правила (owner_id IS NULL) і власні правила цього користувача; приєднуємо його «перемикачі» базових.
     rows = await db.execute(select(Rule, RuleOverride.enabled).outerjoin(
         RuleOverride, and_(RuleOverride.rule_id == Rule.id, RuleOverride.owner_id == owner_id))
         .where(or_(Rule.owner_id.is_(None), Rule.owner_id == owner_id)))
@@ -73,7 +97,7 @@ async def collect_facts(db: AsyncSession, target: Target, rules: list[inference.
     for rule in rules:
         for c in rule.conditions:
             if c.fact_key in facts:
-                continue
+                continue  # таке значення вже отримано для іншого правила: другий запит не потрібен
             if c.scope == "siblings":
                 facts[c.fact_key] = await _sibling_values(db, target, c, incident_instance, ref)
                 continue
@@ -83,11 +107,13 @@ async def collect_facts(db: AsyncSession, target: Target, rules: list[inference.
 
 
 async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target, ref: datetime) -> Diagnosis:
+    """Визначає причину інциденту й зберігає діагноз (один на інцидент; при ескалації оновлюється)."""
     rules = await active_rules(db, target.owner_id, target.type)
     facts, names = await collect_facts(db, target, rules, incident.instance, ref)
     result = inference.diagnose(rules, facts, names, target.type)
 
     primary = result.primary
+    # Діагноз інциденту один: якщо він уже є (інцидент підвищено), оновлюємо його, а не створюємо другий.
     diagnosis = await db.scalar(select(Diagnosis).where(Diagnosis.incident_id == incident.id))
     if diagnosis is None:
         diagnosis = Diagnosis(incident_id=incident.id)
@@ -95,7 +121,7 @@ async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target
     diagnosis.rule_id = primary.rule.id if primary else None
     diagnosis.matched_ratio = primary.ratio if primary else 0.0
     diagnosis.evidence = [vars(e) for e in primary.evidence] if primary else []
-    diagnosis.alternatives = [alternative(m) for m in result.alternatives[:3]]
+    diagnosis.alternatives = [alternative(m) for m in result.alternatives[:3]]  # у картці показуємо не більше трьох
     diagnosis.context = await context_notes(db, incident, target, ref)
     return diagnosis
 
@@ -107,6 +133,7 @@ def alternative(m: inference.Match) -> dict:
             "missing": [{"text": e.text, "value": e.value} for e in m.evidence if not e.ok]}
 
 
+# Скільки часу «назад» шукаємо інші інциденти на тому ж сервері для блоку «що було поруч».
 CONTEXT_WINDOW = timedelta(minutes=15)
 
 
@@ -116,11 +143,13 @@ async def context_notes(db: AsyncSession, incident: Incident, target: Target, re
     if host is None:
         return []
     notes: list[str] = []
+    # 1) Перезавантаження: метрика uptime_h (години роботи) менша за годину означає, що сервер щойно стартував.
     uptime = await db.scalar(text("""SELECT value FROM metrics WHERE target_id = :t AND name = 'uptime_h' AND instance = ''
                                      AND ts <= :ref AND ts > :since ORDER BY ts DESC LIMIT 1"""),
                              {"t": host.id, "ref": ref, "since": ref - LAST_LOOKBACK})
     if uptime is not None and uptime < 1:
         notes.append(f"Сервер «{host.name}» перезавантажено близько {max(1, round(uptime * 60))} хв тому")
+    # 2) Інші інциденти цього користувача на сервері чи його об'єктах, що почалися раніше, але не давніше 15 хвилин.
     earlier = await db.execute(
         select(Incident, Target.name).join(Target, Target.id == Incident.target_id)
         .where(Incident.owner_id == target.owner_id, Incident.id != incident.id, or_(Target.id == host.id, Target.host_id == host.id),

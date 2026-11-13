@@ -12,6 +12,10 @@ from app.errors import Unprocessable
 from app.models import Diagnosis, Incident, Rule, Target, User
 from app.schemas.reports import MetricStat, ReportOut, ReportRow, TopCause
 
+# Звіт за період: для кожного об'єкта рахується доступність (за інцидентами недоступності), кількість інцидентів,
+# середній час виявлення (від початку порушення до відкриття інциденту) й відновлення, середні та пікові значення метрик.
+# Також найчастіші причини за період. Експорт CSV формується тут же (to_csv).
+
 MAX_PERIOD = timedelta(days=31)  # сирі дані зберігаються 30 днів
 # які метрики показуємо в звіті для кожного типу об'єкта
 REPORT_METRICS = {
@@ -24,6 +28,7 @@ LABELS = {"cpu_usage": "CPU", "ram_usage": "RAM", "response_ms": "Час від�
 TYPES = {"server": "Сервер", "service": "Сервіс", "container": "Контейнер", "database": "База даних"}
 
 
+# Захист від некоректних і надто великих періодів (сирі дані живуть лише 30 днів).
 def _check_period(start: datetime, end: datetime) -> None:
     if end <= start:
         raise Unprocessable("Кінець періоду має бути пізніше за початок")
@@ -55,10 +60,12 @@ def _downtime_s(incidents: list[Incident], start: datetime, end: datetime, now: 
     return total
 
 
+# Дати з параметрів запиту можуть прийти без часового поясу; вважаємо їх UTC.
 def _utc(d: datetime) -> datetime:
     return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d  # дата без часового поясу – це UTC
 
 
+# Будує звіт: збирає інциденти й статистику метрик користувача й підсумовує по кожному об'єкту.
 async def build(db: AsyncSession, user: User, start: datetime, end: datetime) -> ReportOut:
     start, end = _utc(start), _utc(end)
     _check_period(start, end)

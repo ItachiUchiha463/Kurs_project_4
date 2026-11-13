@@ -11,6 +11,9 @@ from app.db import Base
 
 
 class User(Base):
+    """Користувач системи. Пароль зберігається лише як bcrypt-хеш; одноразові токени (скидання пароля, підтвердження пошти,
+    прив'язка Telegram) – лише як SHA-256-хеші зі строком дії. token_version – лічильник: його збільшення миттєво
+    анулює всі видані токени входу («вийти на всіх пристроях»)."""
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     email: Mapped[str] = mapped_column(Text, unique=True)
@@ -33,6 +36,10 @@ class User(Base):
 
 
 class Target(Base):
+    """Об'єкт моніторингу: сервер, сервіс, контейнер або база даних – усе в одній таблиці.
+
+    Контейнери й бази створюються автоматично (source='discovered') і мають host_id – сервер, на якому вони працюють.
+    Токен агента зберігається лише як хеш (agent_token_hash). Поле status – готовий підсумковий стан для дашборда."""
     __tablename__ = "targets"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -84,6 +91,9 @@ metrics = Table(
 
 
 class Incident(Base):
+    """Інцидент: порушення порога, що тривало заданий час. Має рівень (severity) і статус: open (відкритий),
+    acknowledged (підтверджений), resolved (закритий), suppressed (придушений через недоступний сервер).
+    Унікальний індекс one_open_incident не дозволяє двох незакритих інцидентів на один ряд (об'єкт + метрика + instance)."""
     __tablename__ = "incidents"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
@@ -110,6 +120,7 @@ class Incident(Base):
 
 
 class IncidentEvent(Base):
+    """Подія в хронології інциденту: виявлено, відкрито, підвищено, підтверджено, закрито тощо."""
     __tablename__ = "incident_events"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incidents.id", ondelete="CASCADE"), index=True)
@@ -123,6 +134,8 @@ class IncidentEvent(Base):
 
 
 class Rule(Base):
+    """Правило логічного виведення: «якщо умови (JSON у conditions) – то причина й рекомендація».
+    owner_id порожній – базове правило (з seed_rules.py), інакше власне правило користувача."""
     __tablename__ = "rules"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     owner_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
@@ -136,6 +149,7 @@ class Rule(Base):
 
 
 class Diagnosis(Base):
+    """Діагноз інциденту: яке правило спрацювало, докази (evidence), можливі інші причини (alternatives) і контекст."""
     __tablename__ = "diagnoses"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     incident_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("incidents.id", ondelete="CASCADE"), unique=True)

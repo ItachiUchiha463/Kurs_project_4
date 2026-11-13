@@ -1,4 +1,10 @@
-"""Docker-контейнери (ТЗ 5.3): читаємо лише Docker Engine API (через docker-socket-proxy на Linux), нічого не змінюємо."""
+"""Docker-контейнери (ТЗ 5.3): читаємо лише Docker Engine API (через docker-socket-proxy на Linux), нічого не змінюємо.
+
+Для кожного контейнера агент робить два запити до Docker:
+  GET /containers/<id>/json   – стан (працює, код виходу, перезапуски, healthcheck, чи вбито через OOM);
+  GET /containers/<id>/stats  – споживання ресурсів (CPU, пам'ять, мережа, диск) – лише для працюючих.
+Контейнери опитуються паралельно (WORKERS потоків), бо кожен запит stats Docker виконує близько секунди.
+"""
 import fnmatch
 import logging
 import time
@@ -7,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 
 log = logging.getLogger("vigil-agent")
+# Стан healthcheck контейнера -> число (метрика container_health: 0 – збій, 1 – запускається, 2 – здоровий).
 HEALTH = {"unhealthy": 0, "starting": 1, "healthy": 2}
 WORKERS = 10  # одночасних запитів stats (ТЗ 5.3)
 
@@ -15,6 +22,7 @@ Sample = tuple[str, str, float]  # (container_id, metric, value)
 
 def client_for(url: str) -> httpx.Client:
     """tcp://host:port або unix:///шлях; npipe (Docker Desktop на Windows) не підтримується – див. DEPLOY.md."""
+    # Це «фабричний метод»: за схемою адреси вибирає потрібний транспорт (unix-сокет чи TCP).
     if url.startswith("unix://"):
         return httpx.Client(transport=httpx.HTTPTransport(uds=url.removeprefix("unix://")), base_url="http://docker", timeout=10)
     if url.startswith("tcp://"):
@@ -23,6 +31,7 @@ def client_for(url: str) -> httpx.Client:
 
 
 def _cpu_pct(stats: dict) -> float:
+    """CPU контейнера, %: приріст часу процесора контейнера / приріст часу всієї системи між двома знімками Docker."""
     cpu, pre = stats.get("cpu_stats", {}), stats.get("precpu_stats", {})
     d_cpu = cpu.get("cpu_usage", {}).get("total_usage", 0) - pre.get("cpu_usage", {}).get("total_usage", 0)
     d_sys = cpu.get("system_cpu_usage", 0) - pre.get("system_cpu_usage", 0)
@@ -31,6 +40,7 @@ def _cpu_pct(stats: dict) -> float:
 
 
 def _mem(stats: dict) -> tuple[float, float]:
+    """(використання пам'яті, % від ліміту; використання, МБ). Кеш файлової системи не рахується як «зайнята» пам'ять."""
     m = stats.get("memory_stats", {})
     inner = m.get("stats", {})
     used = m.get("usage", 0) - inner.get("inactive_file", inner.get("cache", 0))  # без кешу
@@ -39,11 +49,13 @@ def _mem(stats: dict) -> tuple[float, float]:
 
 
 def _net(stats: dict) -> tuple[int, int]:
+    """Сумарні лічильники байтів мережі контейнера (отримано, надіслано) по всіх його інтерфейсах."""
     nets = stats.get("networks", {}).values()
     return sum(n.get("rx_bytes", 0) for n in nets), sum(n.get("tx_bytes", 0) for n in nets)
 
 
 def _block(stats: dict) -> tuple[int, int]:
+    """Сумарні лічильники байтів дискового вводу-виводу контейнера (прочитано, записано)."""
     rd = wr = 0
     for e in stats.get("blkio_stats", {}).get("io_service_bytes_recursive") or []:
         op = e.get("op", "").lower()
@@ -55,16 +67,20 @@ def _block(stats: dict) -> tuple[int, int]:
 
 
 class DockerCollector:
+    """Збирає метрики всіх контейнерів сервера й пам'ятає лічильники мережі/диска для розрахунку швидкості."""
+
     def __init__(self, client: httpx.Client, ignore: list[str] | None = None):
         self.client, self.ignore = client, ignore or []
         self._prev: dict[str, tuple[float, int, int, int, int]] = {}  # id -> (t, rx, tx, read, write)
 
     def _skip(self, c: dict) -> bool:
+        """Чи пропустити контейнер: мітка vigil.ignore=true або назва збігається з маскою з docker_ignore."""
         names = [n.lstrip("/") for n in c.get("Names", [])]
         return c.get("Labels", {}).get("vigil.ignore") == "true" or any(fnmatch.fnmatch(n, m) for n in names for m in self.ignore)
 
     def _one(self, c: dict) -> tuple[dict, list[Sample]]:
-        cid = c["Id"][:12]
+        """Метрики одного контейнера: (опис контейнера для автовиявлення, список значень)."""
+        cid = c["Id"][:12]  # коротке ім'я контейнера, як у «docker ps»
         # обрізаємо до меж схеми сервера: один довгий образ інакше відхилив би весь пакет (422)
         info = {"id": cid, "name": (c["Names"][0].lstrip("/") if c.get("Names") else cid)[:100], "image": c.get("Image", "")[:200],
                 "state": c.get("State", "")[:30]}
@@ -76,6 +92,7 @@ class DockerCollector:
         if st.get("Health", {}).get("Status") in HEALTH:
             s.append((cid, "container_health", float(HEALTH[st["Health"]["Status"]])))
         if not run:
+            # Зупинений контейнер: лише код виходу (0 – штатна зупинка), ресурсів він не споживає.
             s.append((cid, "container_exit_code", float(st.get("ExitCode", 0))))
             return info, s
         stats = self.client.get(f"/containers/{cid}/stats", params={"stream": "false"}).raise_for_status().json()
@@ -83,6 +100,7 @@ class DockerCollector:
         s += [(cid, "container_cpu", _cpu_pct(stats)), (cid, "container_mem", mem_pct), (cid, "container_mem_bytes", mem_mb)]
         now, (rx, tx), (rd, wr) = time.monotonic(), _net(stats), _block(stats)
         if cid in self._prev:
+            # Швидкості мережі й диска рахуються з другого опитування (потрібен попередній знімок).
             t0, rx0, tx0, rd0, wr0 = self._prev[cid]
             dt = max(now - t0, 1e-3)
             s += [(cid, "container_net_in", max(rx - rx0, 0) / 1024 / dt), (cid, "container_net_out", max(tx - tx0, 0) / 1024 / dt),
@@ -92,6 +110,7 @@ class DockerCollector:
 
     def collect(self) -> tuple[list[dict], list[Sample]]:
         """(список контейнерів, значення метрик); контейнер, який не вдалося прочитати, пропускається."""
+        # all=true: разом із зупиненими контейнерами, щоб ловити «контейнер зупинився».
         found = [c for c in self.client.get("/containers/json", params={"all": "true"}).raise_for_status().json() if not self._skip(c)]
         infos, samples = [], []
 
@@ -102,6 +121,7 @@ class DockerCollector:
                 log.warning("контейнер %s пропущено: %s", c.get("Id", "?")[:12], type(e).__name__)
                 return None
 
+        # Паралельно опитуємо контейнери (кожен запит stats триває ~1 с); pool.map зберігає порядок.
         with ThreadPoolExecutor(WORKERS) as pool:
             for res in pool.map(safe, found):
                 if res:

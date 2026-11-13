@@ -23,6 +23,7 @@ const SEVERITY_META: Record<Severity, Meta> = {
   critical: { label: 'Критичний', icon: X, cls: 'bg-crit-bg text-crit' },
 }
 
+/** Універсальна «пілюля»: іконка + текст + колір. Колір завжди супроводжується іконкою й текстом (доступність). */
 function Pill({ meta, label }: { meta: Meta; label?: string }) {
   const Icon = meta.icon
   return (

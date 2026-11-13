@@ -1,3 +1,11 @@
+/**
+ * Хуки отримання даних (TanStack Query). Кожен хук = один запит до API з ключем кешу.
+ *
+ * Як це працює:
+ *   – queryKey – «адреса» даних у кеші. Два компоненти з однаковим ключем діляться одним запитом і одним результатом.
+ *   – WebSocket (ws/live.ts) оновлює кеш за ключами, тож сторінки перемальовуються самі, без повторних запитів.
+ *   – staleTime – скільки секунд дані вважаються свіжими (не перезапитуються при повторному відкритті сторінки).
+ */
 import { useQuery } from '@tanstack/react-query'
 
 import { api } from '@/lib/api'
@@ -7,14 +15,18 @@ import type { Incident, IncidentDetail, Me, Point, Report, Rule, Target, Thresho
 export type Range = '1h' | '24h' | '7d' | '30d'
 export const RANGE_MINUTES: Record<Range, number> = { '1h': 60, '24h': 1440, '7d': 10_080, '30d': 43_200 }
 
+/** Поточний користувач; запит іде лише тоді, коли є токен (enabled). */
 export const useMe = () =>
   useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/me'), enabled: !!getToken(), staleTime: 60_000 })
 
+/** Усі об'єкти користувача (дашборд). Ключ ['targets'] оновлюється подіями WebSocket. */
 export const useTargets = () => useQuery({ queryKey: ['targets'], queryFn: () => api<Target[]>('/targets') })
 
+/** Один об'єкт (сторінка сервера). */
 export const useTarget = (id: number) =>
   useQuery({ queryKey: ['target', id], queryFn: () => api<Target>(`/targets/${id}`) })
 
+/** Контейнери й бази сервера; `enabled` не дає робити запит для об'єктів, що не є серверами. */
 export const useChildren = (id: number, enabled: boolean) =>
   useQuery({ queryKey: ['children', id], queryFn: () => api<Target[]>(`/targets/${id}/children`), enabled })
 
@@ -24,9 +36,11 @@ export interface IncidentFilters {
   target_id?: number
 }
 
+/** Список інцидентів з фільтрами; фільтри входять у ключ, тож кожна комбінація кешується окремо. */
 export const useIncidents = (filters: IncidentFilters = {}) =>
   useQuery({ queryKey: ['incidents', filters], queryFn: () => api<Incident[]>('/incidents', { params: { ...filters, limit: 100 } }) })
 
+/** Картка інциденту (діагноз, докази, хронологія). */
 export const useIncident = (id: number) =>
   useQuery({ queryKey: ['incident', id], queryFn: () => api<IncidentDetail>(`/incidents/${id}`) })
 
@@ -35,6 +49,7 @@ export const useSeries = (targetId: number, name: string, instance: string, rang
   useQuery({
     queryKey: ['series', targetId, name, instance, range],
     queryFn: () => {
+      // Період рахується від «зараз» у момент запиту: «остання година» = [зараз − 60 хв, зараз].
       const end = new Date()
       const start = new Date(end.getTime() - RANGE_MINUTES[range] * 60_000)
       return api<Point[]>(`/targets/${targetId}/metrics`, {
@@ -45,6 +60,7 @@ export const useSeries = (targetId: number, name: string, instance: string, rang
   })
 
 export type ReportRange = '24h' | '7d' | '30d'
+/** Параметри «з» і «по» для звіту й експорту CSV за обраний період. */
 export const reportParams = (range: ReportRange) => {
   const end = new Date()
   return { from: new Date(end.getTime() - RANGE_MINUTES[range] * 60_000).toISOString(), to: end.toISOString() }
@@ -61,4 +77,5 @@ export const useThresholds = (targetId?: number) =>
     staleTime: 60_000,
   })
 
+/** Правила логічного виведення (базові й власні). */
 export const useRules = () => useQuery({ queryKey: ['rules'], queryFn: () => api<Rule[]>('/rules') })

@@ -1,3 +1,12 @@
+"""WebSocket-ендпоінт /api/ws: канал, яким сервер сам надсилає браузеру події в реальному часі.
+
+Сценарій з'єднання:
+  1. Браузер відкриває WebSocket.
+  2. ПЕРШИМ повідомленням він надсилає {"type": "auth", "token": "<JWT>"} (за AUTH_TIMEOUT_S секунд).
+  3. Сервер перевіряє токен і «заводить» користувача в його кімнату (realtime/hub.py), відповідає {"type": "ready"}.
+  4. Далі сервер шле події (оновлення метрик, зміни інцидентів), а клієнт періодично шле "ping" (відповідь "pong").
+  5. Окрема задача _watch кожні 30 с перевіряє, чи токен ще чинний; якщо ні – з'єднання закривається (код 4401).
+"""
 import asyncio
 import contextlib
 import time
@@ -34,7 +43,7 @@ async def _watch(ws: WebSocket, claims: Claims) -> None:
         await asyncio.sleep(RECHECK_S)
         if not await _still_valid(claims):
             with contextlib.suppress(Exception):
-                await ws.close(code=4401)
+                await ws.close(code=4401)  # 4401 – наш код «потрібна повторна автентифікація»
             return
 
 
@@ -50,13 +59,14 @@ async def ws_endpoint(ws: WebSocket):
         async with SessionLocal() as db:
             user = await auth_service.user_from_token(db, claims.user_id, claims.token_version)
     except (asyncio.TimeoutError, AuthError, ValueError, AttributeError, WebSocketDisconnect, KeyError):
-        await ws.close(code=4401)
+        await ws.close(code=4401)  # будь-яка проблема з автентифікацією: закриваємо без подробиць
         return
     hub.join(user.id, ws)
-    watcher = asyncio.create_task(_watch(ws, claims))
+    watcher = asyncio.create_task(_watch(ws, claims))  # фонова перевірка чинності токена
     await ws.send_json({"type": "ready"})
     try:
         while True:
+            # Клієнт шле "ping", щоб з'єднання не вважали неактивним проксі; ми відповідаємо "pong".
             if await ws.receive_text() == "ping":
                 await ws.send_text("pong")
     except WebSocketDisconnect:

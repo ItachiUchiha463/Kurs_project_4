@@ -9,6 +9,8 @@ export interface MetricMeta {
   max?: number
 }
 
+// Довідник метрик для інтерфейсу: назви, одиниці, пороги для ліній на графіку й межі осі. Метрики, яких тут немає,
+// показуються за технічною назвою (див. metricLabel). Порогові значення дзеркалять engine/defaults.py на бекенді.
 export const METRICS: Record<string, MetricMeta> = {
   cpu_usage: { label: 'Завантаження CPU', unit: '%', warn: 80, crit: 95, max: 100 },
   ram_usage: { label: 'Використання RAM', unit: '%', warn: 85, crit: 95, max: 100 },
@@ -62,6 +64,7 @@ export const FLAG_METRICS = new Set([
 export const TYPE_LABEL: Record<string, string> = { server: 'Сервер', service: 'Сервіс', container: 'Контейнер', database: 'База даних' }
 export const AGG_LABEL: Record<string, string> = { last: 'останнє значення', avg: 'середнє', max: 'максимум', min: 'мінімум', delta: 'приріст', slope: 'зміна за годину' }
 
+/** Людська назва метрики (з instance у дужках, наприклад «Заповненість диска (/)»). */
 export const metricLabel = (metric: string, instance = '') =>
   (METRICS[metric]?.label ?? metric) + (instance ? ` (${instance})` : '')
 

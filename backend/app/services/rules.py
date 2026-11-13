@@ -12,6 +12,11 @@ from app.schemas.rules import RuleIn, RuleOut, RuleTestOut
 from app.services import diagnosis
 
 
+# Правила бувають двох видів: БАЗОВІ (owner_id порожній, спільні для всіх, з seed_rules.py) і ВЛАСНІ (створені користувачем).
+# Базові можна лише вмикати/вимикати для себе (таблиця rule_overrides), власні – повністю редагувати й видаляти.
+
+
+# ORM-правило -> схема відповіді API; own позначає власне правило (його можна редагувати).
 def _out(rule: Rule, enabled: bool) -> RuleOut:
     return RuleOut(id=rule.id, name=rule.name, cause=rule.cause, recommendation=rule.recommendation, applies_to=list(rule.applies_to),
                    conditions=rule.conditions, priority=rule.priority, enabled=enabled, own=rule.owner_id is not None)
@@ -27,6 +32,7 @@ async def _visible(db: AsyncSession, user: User, rule_id: int) -> tuple[Rule, bo
     return row[0], row[1]
 
 
+# Лише ВЛАСНЕ правило користувача (для редагування й видалення); базове й чуже дають «не знайдено».
 async def _own(db: AsyncSession, user: User, rule_id: int) -> Rule:
     rule = await db.scalar(select(Rule).where(Rule.id == rule_id, Rule.owner_id == user.id))
     if rule is None:
@@ -34,6 +40,7 @@ async def _own(db: AsyncSession, user: User, rule_id: int) -> Rule:
     return rule
 
 
+# Усі правила, видимі користувачеві: спершу базові, потім власні; з урахуванням його вимикань.
 async def list_rules(db: AsyncSession, user: User) -> list[RuleOut]:
     rows = await db.execute(select(Rule, RuleOverride.enabled).outerjoin(
         RuleOverride, and_(RuleOverride.rule_id == Rule.id, RuleOverride.owner_id == user.id))
@@ -41,12 +48,14 @@ async def list_rules(db: AsyncSession, user: User) -> list[RuleOut]:
     return [_out(r, r.enabled if o is None else o) for r, o in rows]
 
 
+# Переносить поля з запиту (RuleIn, уже перевіреного схемою) у ORM-правило.
 def _fill(rule: Rule, data: RuleIn) -> None:
     rule.name, rule.cause, rule.recommendation, rule.priority = data.name, data.cause, data.recommendation, data.priority
     rule.applies_to = list(data.applies_to)
     rule.conditions = [c.model_dump() for c in data.conditions]
 
 
+# Створення власного правила; кількість обмежена квотою (QUOTA_RULES).
 async def create(db: AsyncSession, user: User, data: RuleIn) -> RuleOut:
     if await db.scalar(select(func.count()).select_from(Rule).where(Rule.owner_id == user.id)) >= settings.quota_rules:
         raise QuotaExceeded(f"Ліміт власних правил: {settings.quota_rules}")
@@ -57,17 +66,20 @@ async def create(db: AsyncSession, user: User, data: RuleIn) -> RuleOut:
     return _out(rule, True)
 
 
+# Редагування власного правила.
 async def update(db: AsyncSession, user: User, rule_id: int, data: RuleIn) -> RuleOut:
     rule = await _own(db, user, rule_id)
     _fill(rule, data)
     return _out(rule, rule.enabled)
 
 
+# Видалення власного правила.
 async def remove(db: AsyncSession, user: User, rule_id: int) -> None:
     await _own(db, user, rule_id)
     await db.execute(delete(Rule).where(Rule.id == rule_id))
 
 
+# Вмикання/вимикання: для власного – поле enabled, для базового – запис у rule_overrides (лише для цього користувача).
 async def set_enabled(db: AsyncSession, user: User, rule_id: int, enabled: bool) -> RuleOut:
     rule, override = await _visible(db, user, rule_id)
     if rule.owner_id is not None:

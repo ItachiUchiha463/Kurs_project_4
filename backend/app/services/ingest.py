@@ -1,3 +1,15 @@
+"""Приймання метрик від агента (POST /api/ingest): перевірка пакета й передача його в конвеєр.
+
+Цей файл відповідає на запитання «чи можна довіряти тому, що надіслав агент». Агент працює на чужому сервері,
+тому все, що від нього приходить, вважається недовіреним і перевіряється на кількох рівнях:
+
+  рівень 1 (_authenticate)  – чи дійсний токен, чи не завеликий пакет, чи не надто часті запити;
+  рівень 2 (check_record)   – кожен запис окремо: відома метрика, число, діапазон, мітка часу;
+  рівень 3 (_collect)       – ліміт кількості різних рядів, належність записів дочірнім об'єктам, «свіжість»;
+  потім ingest() зберігає прийняте в БД і віддає свіжі точки конвеєру (services/pipeline.py).
+
+Погані записи не ламають весь пакет: вони відхиляються з причиною, а решта обробляється.
+"""
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -22,14 +34,18 @@ MAX_INSTANCE_LEN = 100
 MAX_CONTAINERS = 100  # виявлених контейнерів на один сервер (ТЗ 2.4)
 GONE_HIDE_AFTER = timedelta(hours=24)  # контейнер, що зник із Docker, ховається через добу (ТЗ 5.3)
 GONE_DELETE_AFTER = timedelta(days=7)  # а через тиждень видаляється разом з історією: перестворені контейнери мають нові id й інакше копичаться
+# Коли востаннє (за монотонним годинником) приймали пакет від цього об'єкта: захист від надто частих запитів.
 _last_ingest: dict[int, float] = {}  # shortcut: у пам'яті процесу; рівно один процес (ТЗ розд. 3), при масштабуванні – у БД
 
 
+# Які ряди (метрика + instance) об'єкт уже надсилав за останню добу. Без ліміту зловмисний або зламаний агент
+# міг би надсилати нові назви instance щоразу й безмежно роздувати таблицю метрик.
 _series_seen: dict[int, tuple[float, set[tuple[str, str]]]] = {}  # (коли завантажено, відомі ряди) кожного об'єкта: захист від безмежного росту
 SERIES_TTL_S = 3600  # раз на годину список перечитується, щоб зниклі ряди (змінні диски) звільняли місце
 
 
 async def _known_series(db: AsyncSession, target_id: int) -> set[tuple[str, str]]:
+    """Відомі ряди об'єкта: з кешу в пам'яті, а раз на годину перечитуються з БД."""
     loaded = _series_seen.get(target_id)
     if loaded is None or time.monotonic() - loaded[0] > SERIES_TTL_S:
         rows = await db.execute(text("SELECT DISTINCT name, instance FROM metrics WHERE target_id = :t AND ts > now() - interval '1 day'"),
@@ -39,18 +55,24 @@ async def _known_series(db: AsyncSession, target_id: int) -> set[tuple[str, str]
 
 
 def forget_target(target_id: int) -> None:
+    """Прибирає з пам'яті все про об'єкт (при його видаленні)."""
     _last_ingest.pop(target_id, None)
     _series_seen.pop(target_id, None)
 
 
 def check_record(rec: IngestRecord, host_name: str, ts: datetime, now: datetime) -> str | None:
-    """Причина відхилення запису або None (ТЗ розд. 6)."""
+    """Перевіряє один запис. Повертає причину відхилення або None, якщо запис добрий (ТЗ розд. 6).
+
+    Перевірки йдуть від дешевих до дорогих; перша, що не пройшла, і є причиною.
+    """
     if rec.host != host_name:
+        # Токен належить одному об'єкту: агент не може писати метрики «від імені» іншого сервера.
         return "host не збігається з об'єктом токена"
     if rec.metric not in AGENT_METRICS:
         return "невідома метрика"
     if len(rec.instance) > MAX_INSTANCE_LEN:
         return f"instance довший за {MAX_INSTANCE_LEN} символів"
+    # `rec.value != rec.value` – це перевірка на NaN (єдине число, яке не дорівнює самому собі).
     if rec.value != rec.value or rec.value in (float("inf"), float("-inf")):
         return "значення не є числом"
     if rec.value < 0 or (rec.metric in PERCENT_METRICS and rec.value > 100):
@@ -63,7 +85,12 @@ def check_record(rec: IngestRecord, host_name: str, ts: datetime, now: datetime)
 
 
 def clock_offset(agent_time: datetime | None, now: datetime) -> timedelta:
-    """Зсув годинника агента відносно сервера (ТЗ 5.1); без заголовка – 0."""
+    """Зсув годинника агента відносно сервера (ТЗ 5.1); без заголовка – 0.
+
+    Агент надсилає свій поточний час у заголовку X-Agent-Time. Якщо його годинник відстає на 5 хвилин, до всіх
+    міток часу пакета додається цей зсув, і метрики лягають у правильні моменти. Сам зсув зберігається в об'єкті,
+    а в інтерфейсі з'являється попередження, якщо розбіжність перевищує 60 секунд.
+    """
     return now - agent_time if agent_time else timedelta(0)
 
 
@@ -73,8 +100,10 @@ async def sync_containers(db: AsyncSession, server: Target, found: list[Containe
 
     Ключ словника – те саме «docker:<id>» / «postgres:<id>», що агент пише в поле target записів.
     """
+    # Уже відомі дочірні об'єкти цього сервера, що були виявлені автоматично (не додані вручну).
     children = {c.external_id: c for c in await db.scalars(
         select(Target).where(Target.host_id == server.id, Target.source == "discovered"))}
+    # Що агент бачить зараз: контейнери (ключ docker:<id>) і бази (postgres:<id>), не більше ліміту.
     wanted = [(f"docker:{i.id}", "container", "docker", i.name, i.image) for i in found[:MAX_CONTAINERS]]
     wanted += [(f"{i.engine}:{i.id}", "database", i.engine, i.name, "PostgreSQL") for i in databases[:MAX_CONTAINERS]]
     seen = set()
@@ -82,22 +111,27 @@ async def sync_containers(db: AsyncSession, server: Target, found: list[Containe
         seen.add(key)
         child = children.get(key)
         if child is None:
+            # Новий контейнер або база: створюємо дочірній об'єкт, успадковуючи інтервал сервера.
             child = Target(owner_id=server.owner_id, name=name, type=kind, check_type=check_type, source="discovered",
                            host_id=server.id, external_id=key, address=address, interval_s=server.interval_s)
             db.add(child)
             children[key] = child
         else:
+            # Уже відомий: лише оновлюємо назву й адресу (контейнер могли перейменувати).
             child.name, child.address = name, address
+    # Тепер ті, що були раніше, а зараз зникли з Docker.
     for key, child in list(children.items()):
         if key in seen:
             continue
         last = child.last_seen or child.created_at or now
         if last < now - GONE_DELETE_AFTER:
+            # Зник понад тиждень тому: видаляємо разом з історією й забуваємо його стани в пам'яті.
             await db.delete(child)
             del children[key]
             pipeline.forget_target(child.id)
             forget_target(child.id)
         elif not child.hidden and last < now - GONE_HIDE_AFTER:
+            # Зник понад добу тому: ховаємо з інтерфейсу, але історію лишаємо.
             child.hidden = True
     await db.flush()
     return children
@@ -105,11 +139,13 @@ async def sync_containers(db: AsyncSession, server: Target, found: list[Containe
 
 async def _authenticate(db: AsyncSession, token: str, records: int) -> Target:
     """Токен агента, розмір пакета й частота запитів: усе, що перевіряється до розбору записів."""
+    # У БД зберігається лише хеш токена, тому порівнюємо хеші: навіть витік бази не дає працюючих токенів.
     target = await targets_repo.get_by_agent_token(db, hash_token(token))
     if not target or not target.enabled:
         raise AuthError("Неправильний токен агента")
     if records > MAX_BATCH:
         raise AppError(f"Не більше {MAX_BATCH} записів у пакеті", code="batch_too_large")
+    # Монотонний годинник не залежить від зміни системного часу, тож підходить для вимірювання проміжків.
     mono = time.monotonic()
     if mono - _last_ingest.get(target.id, -1e9) < settings.ingest_min_interval_s:
         raise TooManyRequests("Занадто часті запити")
@@ -121,16 +157,20 @@ async def _collect(db: AsyncSession, target: Target, children: dict[str, Target]
                    offset: timedelta, now: datetime):
     """Перевіряє записи: (рядки для БД, відхилені, свіжі точки для конвеєра, власники точок)."""
     rows, rejected = [], []
+    # «Свіжими» вважаються записи не старші за два інтервали агента. Старіші (з буфера після обриву зв'язку)
+    # лише зберігаються для графіків, а інциденти за ними заднім числом не відкриваються.
     fresh_after = now - timedelta(seconds=2 * target.effective_interval_s)
     known: dict[int, set] = {}
     fresh: dict[int, list[pipeline.Point]] = {target.id: []}
     owners = {target.id: target}
     for i, rec in enumerate(records):
+        # Мітка часу може прийти без часового поясу: тоді вважаємо її UTC. Далі додаємо зсув годинника агента.
         ts = (rec.timestamp if rec.timestamp.tzinfo else rec.timestamp.replace(tzinfo=timezone.utc)) + offset
         reason = check_record(rec, target.name, ts, now)
         if reason:
             rejected.append(IngestRejected(index=i, reason=reason))
             continue
+        # За замовчуванням запис належить самому серверу, а якщо в ньому вказано target – його контейнеру чи базі.
         owner = target
         if rec.target:
             owner = children.get(rec.target)
@@ -154,21 +194,30 @@ async def _collect(db: AsyncSession, target: Target, children: dict[str, Target]
 
 async def ingest(db: AsyncSession, token: str, batch: IngestBatch, agent_time: datetime | None, agent_version: str | None,
                  agent_interval: int | None = None) -> IngestOut:
+    """Точка входу: приймає пакет від агента, зберігає метрики й запускає конвеєр. Викликається з api/targets.py."""
+    # 1. Автентифікація й загальні обмеження.
     target = await _authenticate(db, token, len(batch.records))
     now = datetime.now(timezone.utc)
     offset = clock_offset(agent_time, now)
     if agent_interval:
+        # Інтервал, який агент заявив у своєму налаштуванні; обмежуємо 15–3600 с. Від нього залежить, коли
+        # сервер вирішить, що агент замовк (3 інтервали без даних).
         target.agent_interval_s = max(15, min(3600, agent_interval))
+    # 2. Автовиявлення контейнерів і баз (лише якщо пакет їх містить).
     discovered = bool(batch.containers or batch.databases or any(r.target for r in batch.records))
     children = await sync_containers(db, target, batch.containers, now, batch.databases) if discovered else {}
+    # 3. Перевірка записів.
     rows, rejected, fresh, owners = await _collect(db, target, children, batch.records, offset, now)
     accepted = len(rows)
+    # 4. Сам факт приходу пакета означає, що агент живий: пишемо agent_alive = 1 (його відсутність виявляє _liveness_loop).
     rows.append({"target_id": target.id, "name": "agent_alive", "instance": "", "value": 1.0, "ts": now})  # доказ, що агент живий
     fresh[target.id].append(pipeline.Point("agent_alive", "", now, 1.0))
+    # 5. Масове вставляння в гіпертаблицю metrics і оновлення полів об'єкта.
     await metrics_repo.insert_many(db, rows)
     target.last_seen = now
     target.agent_version = agent_version
     target.clock_offset_s = offset.total_seconds() if agent_time else None
+    # 6. Конвеєр порогів для самого сервера, а потім для кожного його контейнера чи бази.
     await pipeline.process(db, target, fresh[target.id])
     if len(fresh) > 1:
         down = await incidents_repo.server_down(db, target.id) is not None  # раз на пакет для всіх дочірніх об'єктів

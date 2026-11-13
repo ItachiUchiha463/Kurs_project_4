@@ -1,3 +1,8 @@
+"""Сценарії з інцидентами для користувача: список, картка, підтвердження, ручне закриття.
+
+Автоматичне відкриття, підвищення й закриття інцидентів відбувається в services/pipeline.py (за метриками);
+тут лише дії, які ініціює людина через інтерфейс або кнопку в Telegram.
+"""
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +18,7 @@ from app.services.diagnosis import NO_CAUSE, NO_CAUSE_HINT
 
 
 def _out(inc: Incident, target_name: str, suppressed_count: int = 0) -> IncidentOut:
+    """ORM-інцидент -> схема відповіді API (додає назву об'єкта й кількість придушених дочірніх інцидентів)."""
     out = IncidentOut.model_validate(inc)
     out.target_name = target_name
     out.suppressed_count = suppressed_count
@@ -21,12 +27,14 @@ def _out(inc: Incident, target_name: str, suppressed_count: int = 0) -> Incident
 
 async def list_incidents(db: AsyncSession, user: User, status: str | None, target_id: int | None,
                          severity: str | None, cursor: int | None, limit: int) -> list[IncidentOut]:
+    """Список інцидентів користувача з фільтрами; cursor – постраничний вивід «після такого id»."""
     rows = await repo.list_for_owner(db, user.id, status, target_id, severity, cursor, limit)
     counts = await repo.suppressed_counts(db, [i.id for i, _ in rows])
     return [_out(i, name, counts.get(i.id, 0)) for i, name in rows]
 
 
 async def _get(db: AsyncSession, user: User, incident_id: int) -> tuple[Incident, str]:
+    """Інцидент користувача за id. Чужий чи неіснуючий – однаково 404 (не видаємо факт існування)."""
     row = await repo.get(db, user.id, incident_id)
     if not row:
         raise NotFound("Інцидент не знайдено")
@@ -34,6 +42,7 @@ async def _get(db: AsyncSession, user: User, incident_id: int) -> tuple[Incident
 
 
 async def get_incident(db: AsyncSession, user: User, incident_id: int) -> IncidentDetail:
+    """Картка інциденту: сам інцидент, хронологія подій, діагноз і пов'язані (придушені) інциденти."""
     inc, name = await _get(db, user, incident_id)
     events = [EventOut.model_validate(e) for e in await repo.events(db, inc.id)]
     diagnosis = await repo.diagnosis(db, inc.id)
@@ -43,6 +52,7 @@ async def get_incident(db: AsyncSession, user: User, incident_id: int) -> Incide
 
 
 def diagnosis_out(row) -> DiagnosisOut | None:
+    """Діагноз для відповіді API: причина й рекомендація беруться з правила; якщо правила немає – типовий текст."""
     if row is None:
         return None
     d, rule = row
@@ -53,21 +63,24 @@ def diagnosis_out(row) -> DiagnosisOut | None:
 
 
 async def acknowledge(db: AsyncSession, user: User, incident_id: int) -> IncidentOut:
+    """«Підтвердити – я займаюся»: позначає, що інцидентом уже займаються. Лише для відкритого інциденту."""
     inc, name = await _get(db, user, incident_id)
     if inc.status != "open":
         raise Conflict("Підтвердити можна лише відкритий інцидент", code="invalid_state")
     inc.status, inc.acknowledged_at = "acknowledged", datetime.now(timezone.utc)
     repo.add_event(db, inc.id, "acknowledged", user_id=user.id)
-    publish_after_commit(db, user.id, events.incident_event(inc, name, "acknowledged"))
+    publish_after_commit(db, user.id, events.incident_event(inc, name, "acknowledged"))  # браузер оновиться сам
     return _out(inc, name)
 
 
 async def resolve(db: AsyncSession, user: User, incident_id: int, comment: str) -> IncidentOut:
+    """Ручне закриття з обов'язковим коментарем (колеги побачать, чому закрито)."""
     inc, name = await _get(db, user, incident_id)
     if inc.status not in repo.LIVE:
         raise Conflict("Інцидент уже закрито", code="invalid_state")
     inc.status, inc.resolved_at, inc.resolve_comment = "resolved", datetime.now(timezone.utc), comment.strip()
     repo.add_event(db, inc.id, "resolved", user_id=user.id, note=f"Закрито вручну: {inc.resolve_comment}")
+    # Оцінювач і надалі «пам'ятає» інцидент відкритим, але нового не створює, поки значення погане (див. pipeline.keep_silent).
     pipeline.keep_silent(inc)
     if inc.metric in SERVER_DOWN:  # закрили вручну: придушені дочірні об'єкти теж звільняються
         await pipeline.release(db, inc.target_id, inc.resolved_at)

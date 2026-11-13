@@ -1,4 +1,12 @@
-"""HTTP-перевірка (ТЗ 5.2): GET на перевірений IP, без автоматичних редиректів, тіло відповіді не читається."""
+"""HTTP-перевірка (ТЗ 5.2): GET на перевірений IP, без автоматичних редиректів, тіло відповіді не читається.
+
+Сервер Vigil сам відкриває сторінку клієнта й вимірює, чи вона відповідає, з яким кодом і як швидко.
+Безпека (див. також checks/ssrf.py):
+  – перед запитом адреса перетворюється на IP і перевіряється, що він публічний (захист від SSRF);
+  – переходи за редиректами робляться вручну, і IP перевіряється на КОЖНОМУ кроці: сервіс не може «перенаправити»
+    перевірку у внутрішню мережу;
+  – тіло відповіді не завантажується (економія трафіку й захист від величезних відповідей).
+"""
 import asyncio
 import time
 from dataclasses import dataclass
@@ -15,6 +23,7 @@ REDIRECTS = {301, 302, 303, 307, 308}
 
 @dataclass
 class CheckResult:
+    """Результат будь-якої перевірки (HTTP, TCP, ping): доступність 0/1, час відповіді, код, помилка, втрати пакетів."""
     available: int
     response_ms: float | None = None
     status_code: int = 0
@@ -32,6 +41,7 @@ def status_ok(code: int, expected: str) -> bool:
 
 
 async def check_http(url: str, expected: str = "200-399", *, resolver=None, transport=None) -> CheckResult:
+    """Перевіряє сторінку; загальний ліміт часу – TOTAL_TIMEOUT_S. resolver і transport підміняються в тестах."""
     try:
         async with asyncio.timeout(TOTAL_TIMEOUT_S):
             return await _check(url, expected, resolver or ssrf.resolve_public, transport)
@@ -45,12 +55,14 @@ async def _check(url: str, expected: str, resolver, transport) -> CheckResult:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport, follow_redirects=False) as client:
             for _ in range(MAX_REDIRECTS + 1):
                 u = httpx.URL(url)
+                # Перетворюємо ім'я на перевірений публічний IP й з'єднуємось саме з ним, а ім'я передаємо
+                # в заголовку Host і SNI (щоб HTTPS і віртуальні хости працювали). Так DNS не встигне «переїхати».
                 ip = await resolver(u.host, u.port or (443 if u.scheme == "https" else 80))  # IP перевіряється на кожному кроці
                 async with client.stream("GET", u.copy_with(host=ip), headers={"Host": u.netloc.decode()},
                                          extensions={"sni_hostname": u.host}) as r:
                     code, location = r.status_code, r.headers.get("location")
                 if code in REDIRECTS and location:
-                    url = str(u.join(location))
+                    url = str(u.join(location))  # йдемо за редиректом, але наступного кроку знову перевіримо IP
                     continue
                 ms = (time.perf_counter() - t0) * 1000
                 return CheckResult(int(status_ok(code, expected)), ms, code)

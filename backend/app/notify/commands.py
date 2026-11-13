@@ -1,4 +1,10 @@
-"""Команди й кнопки бота (ТЗ 9.1): /start <код> прив'язує чат, «Підтвердити» підтверджує інцидент."""
+"""Команди й кнопки бота (ТЗ 9.1): /start <код> прив'язує чат, «Підтвердити» підтверджує інцидент.
+
+Сюди потрапляє кожне оновлення від Telegram (цикл _bot_loop у background.py). Бот розуміє лише дві речі:
+  1. Команду «/start <код>»: код користувач бере в «Профілі». Якщо код дійсний, чат Telegram прив'язується
+     до його облікового запису й далі сповіщення йдуть туди.
+  2. Натискання кнопки «Підтвердити» під сповіщенням про інцидент (callback_query з даними «ack:<id інциденту>»).
+"""
 import logging
 
 from sqlalchemy import select
@@ -13,11 +19,12 @@ HELP = "Щоб підключити сповіщення, відкрийте Vig
 
 
 async def handle_update(db: AsyncSession, bot, update: dict) -> None:
+    """Обробляє одне оновлення від Telegram: або натискання кнопки, або текстове повідомлення /start."""
     if "callback_query" in update:
         await _callback(db, bot, update["callback_query"])
     elif "message" in update and (text := (update["message"].get("text") or "")).startswith("/start"):
         chat_id = update["message"]["chat"]["id"]
-        code = text.partition(" ")[2].strip()
+        code = text.partition(" ")[2].strip()  # усе після «/start » – це код прив'язки
         user = await telegram_link.link_by_code(db, code, chat_id) if code else None
         reply = f"✅ Telegram підключено до облікового запису {user.full_name}." if user else \
             ("Код недійсний або прострочений. Створіть нове посилання у Vigil." if code else HELP)
@@ -25,9 +32,11 @@ async def handle_update(db: AsyncSession, bot, update: dict) -> None:
 
 
 async def _callback(db: AsyncSession, bot, cb: dict) -> None:
+    """Натискання кнопки під повідомленням. Дані кнопки мають вигляд «ack:42» (підтвердити інцидент №42)."""
     kind, _, raw_id = (cb.get("data") or "").partition(":")
     if kind != "ack" or not raw_id.isdigit():
         return
+    # Користувача визначаємо за чатом, з якого натиснули: підтвердити може лише власник прив'язаного чату.
     user = await db.scalar(select(User).where(User.telegram_chat_id == cb["from"]["id"]))
     try:
         if not user:

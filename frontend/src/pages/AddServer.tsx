@@ -41,6 +41,7 @@ python agent.py --config agent.toml`
 
 const STEPS = ['Дані об’єкта', 'Встановлення агента', 'Перші дані']
 
+/** Індикатор кроків майстра: виконані відмічено галочкою, поточний підсвічено. */
 function Steps({ current }: { current: number }) {
   return (
     <ol className="flex flex-wrap gap-4" aria-label="Кроки">
@@ -56,6 +57,7 @@ function Steps({ current }: { current: number }) {
   )
 }
 
+/** Крок 3: опитує сервер кожні 3 с, поки не прийде перша метрика від агента, і тоді пропонує відкрити сторінку об'єкта. */
 function WaitForData({ created }: { created: TargetCreated }) {
   const { data } = useQuery({
     queryKey: ['target', created.id],
@@ -72,6 +74,10 @@ function WaitForData({ created }: { created: TargetCreated }) {
   )
 }
 
+/**
+ * Майстер додавання об'єкта (3 кроки): 1) дані об'єкта; 2) встановлення агента (лише для сервера: готові команди
+ * для Linux і Windows з токеном); 3) очікування перших даних. Сервіси пропускають крок 2: їх перевіряє сам Vigil.
+ */
 export function AddServerPage() {
   document.title = 'Додати сервер – Vigil'
   const qc = useQueryClient()
@@ -87,6 +93,7 @@ export function AddServerPage() {
   const pingEnabled = watch('ping_enabled')
 
   const { formError, run } = useFormSubmit(setError, ['name', 'address'])
+  // Надсилання форми кроку 1: створює об'єкт; для сервера йдемо на встановлення агента, для сервісу – одразу на очікування.
   const submit = handleSubmit((v) => run(async () => {
     const body = {
       name: v.name, type: v.type, address: v.address || undefined, host_id: v.host_id ? Number(v.host_id) : undefined,

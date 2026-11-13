@@ -1,3 +1,14 @@
+/**
+ * Реальний час: одне WebSocket-з'єднання на весь застосунок.
+ *
+ * Сервер надсилає три види подій (див. LiveEvent у lib/types.ts):
+ *   ready    – з'єднання встановлено й автентифіковано;
+ *   metrics  – нові значення метрик об'єкта (оновлюють картки й графік «1 година»);
+ *   incident – зміна інциденту (відкрито, підвищено, закрито…): оновлює списки й показує повідомлення-«тост».
+ *
+ * Події НЕ викликають повторних запитів до API: вони напряму правлять кеш TanStack Query, тому інтерфейс
+ * оновлюється миттєво й без зайвого навантаження на сервер.
+ */
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
@@ -7,7 +18,8 @@ import { metricLabel } from '@/lib/metrics'
 import type { Incident, LiveEvent, Point, Target } from '@/lib/types'
 
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting'
-const MAX_POINTS_1H = 400
+const MAX_POINTS_1H = 400  // скільки точок тримаємо на графіку «1 година» (старіші відкидаються)
+// Стан з'єднання живе поза React, щоб його міг показувати індикатор «Наживо» у будь-якому місці (useSyncExternalStore).
 let status: LiveStatus = 'connecting'
 const listeners = new Set<() => void>()
 const setStatus = (s: LiveStatus) => {
@@ -15,9 +27,11 @@ const setStatus = (s: LiveStatus) => {
   listeners.forEach((l) => l())
 }
 
+/** Хук для індикатора «Наживо / Підключення… / Перепідключення…». */
 export const useLiveStatus = () =>
   useSyncExternalStore((cb) => (listeners.add(cb), () => listeners.delete(cb)), () => status)
 
+/** Подія «нові метрики»: оновлює картку об'єкта в кеші й дописує точки в графіки «1 година». */
 function applyMetrics(qc: QueryClient, e: Extract<LiveEvent, { type: 'metrics' }>) {
   const patch = (t: Target): Target =>
     t.id === e.target_id ? { ...t, status: e.status, last_seen: e.last_seen, latest: { ...t.latest, ...e.values } } : t
@@ -31,7 +45,9 @@ function applyMetrics(qc: QueryClient, e: Extract<LiveEvent, { type: 'metrics' }
   }
 }
 
+/** Подія «змінився інцидент»: скидає застарілі кеші й, для нових та підвищених, показує повідомлення. */
 function applyIncident(qc: QueryClient, change: string, inc: Incident) {
+  // invalidateQueries позначає дані застарілими, і TanStack Query перезапитує лише ті, що зараз на екрані.
   qc.invalidateQueries({ queryKey: ['incidents'] })
   qc.invalidateQueries({ queryKey: ['incident', inc.id] })
   qc.invalidateQueries({ queryKey: ['targets'] })  // стан дочірніх об’єктів міг змінитися разом із сервером
@@ -52,8 +68,8 @@ export function useLive() {
   const qc = useQueryClient()
   useEffect(() => {
     let ws: WebSocket | null = null
-    let stopped = false
-    let delay = 1000
+    let stopped = false   // true після розмонтування: щоб закрите з'єднання не перепідключалося
+    let delay = 1000      // затримка перед повторною спробою; подвоюється до 30 с
     let timer: number | undefined
 
     const connect = () => {
@@ -79,6 +95,7 @@ export function useLive() {
           window.location.assign('/login')
           return
         }
+        // Звичайний обрив (мережа, перезапуск сервера): пробуємо знову з наростаючою затримкою.
         setStatus('reconnecting')
         timer = window.setTimeout(connect, delay)
         delay = Math.min(delay * 2, 30_000)
@@ -86,6 +103,7 @@ export function useLive() {
     }
     connect()
     return () => {
+      // Прибирання при розмонтуванні: зупиняємо таймер і закриваємо з'єднання.
       stopped = true
       window.clearTimeout(timer)
       ws?.close()
