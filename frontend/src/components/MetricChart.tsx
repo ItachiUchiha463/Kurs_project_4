@@ -42,12 +42,12 @@ export function MetricChart({ targetId, metric, instance = '', range, title }: P
       ) : (
         <div className="h-44" aria-hidden="true">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 6, right: 40, bottom: 0, left: -12 }}>
+            <LineChart data={data} margin={{ top: 6, right: 92, bottom: 0, left: -12 }}>
               <CartesianGrid stroke="var(--grid)" vertical={false} />
               <XAxis dataKey="ts" tickFormatter={fmt} minTickGap={48} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
               <YAxis domain={meta?.max ? [0, meta.max] : [0, 'auto']} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" width={46} />
-              {meta?.warn != null && <ReferenceLine y={meta.warn} stroke="var(--warn)" strokeDasharray="4 4" label={{ value: 'попер.', position: 'right', fontSize: 10, fill: 'var(--warn)' }} />}
-              {meta?.crit != null && <ReferenceLine y={meta.crit} stroke="var(--crit)" strokeDasharray="4 4" label={{ value: 'крит.', position: 'right', fontSize: 10, fill: 'var(--crit)' }} />}
+              {meta?.warn != null && <ReferenceLine y={meta.warn} stroke="var(--warn)" strokeDasharray="4 4" label={{ value: 'попередження', position: 'right', fontSize: 12, fill: 'var(--warn)' }} />}
+              {meta?.crit != null && <ReferenceLine y={meta.crit} stroke="var(--crit)" strokeDasharray="4 4" label={{ value: 'критичний', position: 'right', fontSize: 12, fill: 'var(--crit)' }} />}
               <Tooltip
                 contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
                 labelFormatter={(ts) => fmt(String(ts))}

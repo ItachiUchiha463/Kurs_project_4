@@ -57,7 +57,7 @@ function AppLayout() {
 
   const link = ({ isActive }: { isActive: boolean }) =>
     cn('flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors hover:bg-accent',
-      isActive ? 'bg-accent text-accent-foreground' : 'text-foreground')
+      isActive ? 'bg-accent font-semibold text-accent-foreground' : 'text-foreground')
 
   return (
     <div className="mx-auto grid min-h-screen max-w-[1480px] md:grid-cols-[232px_minmax(0,1fr)] md:gap-5 md:px-4">

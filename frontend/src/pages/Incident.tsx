@@ -22,6 +22,7 @@ import { FLAG_METRICS, metricLabel, metricUnit } from '@/lib/metrics'
 import { useIncident } from '@/lib/queries'
 import type { IncidentEvent } from '@/lib/types'
 
+/** Підписи подій у хронології інциденту за типом події з сервера (incident_events.type). */
 const EVENT_TEXT: Record<string, string> = {
   suppressed: 'Придушено: сервер недоступний',
   detected: 'Виявлено відхилення',
@@ -31,14 +32,20 @@ const EVENT_TEXT: Record<string, string> = {
   acknowledged: 'Підтверджено: хтось уже займається',
   resolved: 'Інцидент закрито',
 }
+/** Колір точки біля події в хронології (за типом). */
 const DOT: Record<string, string> = { suppressed: 'bg-off', detected: 'bg-off', opened: 'bg-crit', escalated: 'bg-crit', deescalated: 'bg-warn', acknowledged: 'bg-ack', resolved: 'bg-ok' }
 
+/** Текст події: якщо є примітка (наприклад, коментар при ручному закритті) – вона, інакше стандартний підпис зі значенням. */
 function eventText(e: IncidentEvent, metric: string): string {
   const base = EVENT_TEXT[e.type] ?? e.type
   const val = e.value != null && e.type !== 'acknowledged' && !FLAG_METRICS.has(metric) ? `: ${num(e.value)} ${metricUnit(metric)}`.trimEnd() : ''
   return e.note ? `${e.note}` : base + (e.type === 'detected' || e.type === 'escalated' ? val : '')
 }
 
+/**
+ * Картка інциденту – головний екран діагностики: ймовірна причина, що робити, докази, інші можливі причини зі
+ * збігом у відсотках, контекст («що було поруч»), графік метрики, хронологія й пов'язані придушені інциденти.
+ */
 export function IncidentPage() {
   const id = Number(useParams().id)
   const q = useIncident(id)
@@ -50,13 +57,16 @@ export function IncidentPage() {
   if (q.isPending) return <Skeleton className="h-64 w-full" />
   const inc = q.data
   document.title = `INC-${inc.id} – Vigil`
+  // «Живий» інцидент – ще вимагає уваги (відкритий або підтверджений): лише для нього є кнопки дій.
   const live = inc.status === 'open' || inc.status === 'acknowledged'
   const refresh = () => { qc.invalidateQueries({ queryKey: ['incident', id] }); qc.invalidateQueries({ queryKey: ['incidents'] }) }
 
+  // «Підтвердити – я займаюся»: позначає інцидент підтвердженим і показує це колегам.
   const acknowledge = async () => {
     try { await api(`/incidents/${id}/acknowledge`, { method: 'POST' }); toast.success('Підтверджено: ви займаєтесь цим інцидентом'); refresh() }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Не вдалося') }
   }
+  // Ручне закриття: коментар обов'язковий (валідація resolveSchema), бо колеги мають бачити, чому закрито.
   const resolve = form.handleSubmit(async (v) => {
     try {
       await api(`/incidents/${id}/resolve`, { method: 'POST', body: v })
@@ -65,6 +75,7 @@ export function IncidentPage() {
       form.setError('root', { message: applyApiError(e, form.setError, ['comment']) ?? undefined })
     }
   })
+  // Діагноз може бути відсутній, поки сервер його ще визначає (тоді показуємо «Визначаємо причину…»).
   const d = inc.diagnosis
 
   return (
@@ -86,13 +97,13 @@ export function IncidentPage() {
         <div className="grid gap-4">
           <section aria-label="Діагностика" className="overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="border-b bg-accent p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-accent-foreground">Ймовірна причина</div>
+              <div className="text-sm font-medium text-muted-foreground">Ймовірна причина</div>
               <h2 className="text-xl font-semibold">{d?.cause ?? 'Визначаємо причину…'}</h2>
             </div>
             {d && (
               <>
                 <div className="flex gap-4 border-b p-4">
-                  <div className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Що зробити</div>
+                  <div className="shrink-0 text-sm font-medium text-muted-foreground">Що зробити</div>
                   <p>{d.recommendation}</p>
                 </div>
                 {d.evidence.length > 0 && (
@@ -113,7 +124,7 @@ export function IncidentPage() {
                   <details key={k} className="border-t p-3 px-4 text-sm text-muted-foreground">
                     <summary className="flex cursor-pointer justify-between gap-3">
                       <span>Можлива причина: {a.name}</span>
-                      <span className="num whitespace-nowrap">збіг {a.pct ?? Math.round((100 * a.ok) / a.total)} % ({a.ok} з {a.total} умов)</span>
+                      <span className="whitespace-nowrap tabular-nums">збіг {a.pct ?? Math.round((100 * a.ok) / a.total)} % ({a.ok} з {a.total} умов)</span>
                     </summary>
                     {a.missing && a.missing.length > 0 && (
                       <div className="mt-2">

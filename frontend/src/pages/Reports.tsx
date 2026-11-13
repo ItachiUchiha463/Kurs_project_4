@@ -41,7 +41,7 @@ export function ReportsPage() {
       <PageHead title="Звіти" subtitle="Доступність, інциденти та навантаження за обраний період"
         actions={<Button variant="outline" size="sm" onClick={() => downloadCsv(range).catch((e) => toast.error(e.message))}><Download aria-hidden="true" />Експорт CSV</Button>} />
       <div className="flex gap-2" role="group" aria-label="Період">
-        {RANGES.map(([k, l]) => <Button key={k} size="sm" variant={range === k ? 'default' : 'outline'} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</Button>)}
+        {RANGES.map(([k, l]) => <Button key={k} size="sm" variant={range === k ? 'secondary' : 'outline'} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</Button>)}
       </div>
 
       {q.isPending ? <Skeleton className="h-64 w-full" /> : q.isError ? <p role="alert" className="text-sm text-crit">Не вдалося побудувати звіт</p> : (

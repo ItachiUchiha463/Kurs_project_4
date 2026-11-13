@@ -16,6 +16,7 @@ import { useChildren, useIncidents, useTarget, type Range } from '@/lib/queries'
 import type { Target } from '@/lib/types'
 import { agentConfig } from '@/pages/AddServer'
 
+/** Опис одного графіка: яка метрика, який instance (диск) і, за потреби, свій заголовок. */
 interface ChartSpec { metric: string; instance?: string; title?: string }
 
 /** Які графіки показувати для об'єкта: новий тип – один запис у таблиці. */
@@ -44,6 +45,10 @@ function chartsFor(t: Target, disks: string[]): ChartSpec[] {
   }
 }
 
+/**
+ * Сторінка об'єкта: графіки за 1 год / 24 год / 7 / 30 днів, вкладка інцидентів, а для сервера ще й список
+ * контейнерів і баз. Тут же – видалення, приховування виявленого об'єкта й випуск нового токена агента.
+ */
 export function TargetPage() {
   const id = Number(useParams().id)
   const t = useTarget(id)
@@ -61,15 +66,19 @@ export function TargetPage() {
   const target = t.data
   document.title = `${target.name} – Vigil`
 
+  // Диски сервера беремо з останніх значень (ключі «disk_usage:/»): для кожного диска окремий графік.
   const disks = Object.keys(target.latest).filter((k) => k.startsWith('disk_usage:')).map((k) => k.slice('disk_usage:'.length))
+  // Годинник сервера розходиться з нашим більш ніж на 60 с: показуємо попередження (мітки часу вже виправлено на сервері).
   const clockDrift = target.clock_offset_s != null && Math.abs(target.clock_offset_s) > 60
 
+  // Видалення об'єкта: після успіху оновлюємо кеш списку й повертаємося на дашборд.
   const remove = async () => {
     await api(`/targets/${id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['targets'] })
     toast.success(`Об’єкт «${target.name}» видалено`)
     navigate('/')
   }
+  // «Сховати» – лише для виявлених контейнерів і баз: вони перестають моніторитися й зникають зі списку.
   const hide = async () => {
     await api(`/targets/${id}/hidden`, { method: 'PUT', body: { hidden: true } })
     qc.invalidateQueries({ queryKey: ['targets'] })
@@ -77,6 +86,7 @@ export function TargetPage() {
     toast.success(`Контейнер «${target.name}» сховано`)
     navigate(target.host_id ? `/targets/${target.host_id}` : '/')
   }
+  // Новий токен агента: показується в діалозі один раз; старий токен перестає діяти одразу.
   const rotate = async () => setNewToken((await api<{ agent_token: string }>(`/targets/${id}/agent-token`, { method: 'POST' })).agent_token)
 
   return (
@@ -132,7 +142,7 @@ export function TargetPage() {
         <>
           <div className="flex gap-2" role="group" aria-label="Період">
             {([['1h', '1 год'], ['24h', '24 год'], ['7d', '7 днів'], ['30d', '30 днів']] as const).map(([k, l]) => (
-              <Button key={k} size="sm" variant={range === k ? 'default' : 'outline'} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</Button>
+              <Button key={k} size="sm" variant={range === k ? 'secondary' : 'outline'} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</Button>
             ))}
           </div>
           {target.status === 'unknown' ? (

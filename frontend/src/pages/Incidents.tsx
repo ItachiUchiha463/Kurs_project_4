@@ -23,7 +23,7 @@ export function IncidentsPage() {
     <>
       <PageHead title="Інциденти" />
       <div className="flex flex-wrap items-center gap-2">
-        {TABS.map(([k, l]) => <Button key={k} size="sm" variant={tab === k ? 'default' : 'outline'} aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</Button>)}
+        {TABS.map(([k, l]) => <Button key={k} size="sm" variant={tab === k ? 'secondary' : 'outline'} aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</Button>)}
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
         {([[undefined, 'Будь-який рівень'], ['critical', 'Критичні'], ['warning', 'Попередження']] as const).map(([k, l]) => (
           <Button key={l} size="sm" variant={severity === k ? 'secondary' : 'ghost'} aria-pressed={severity === k} onClick={() => setSeverity(k)}>{l}</Button>
