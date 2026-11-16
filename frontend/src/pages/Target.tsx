@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { ago, duration } from '@/lib/format'
-import { metricLabel } from '@/lib/metrics'
+import { incidentLabel } from '@/lib/metrics'
 import { useChildren, useIncidents, useTarget, type Range } from '@/lib/queries'
 import type { Target } from '@/lib/types'
 import { agentConfig } from '@/pages/AddServer'
@@ -160,7 +160,7 @@ export function TargetPage() {
               <li key={i.id} className="border-b last:border-b-0">
                 <Link to={`/incidents/${i.id}`} className="flex flex-wrap items-center gap-3 p-4 hover:bg-muted">
                   <IncidentStatusBadge status={i.status} severity={i.severity} />
-                  <span>{metricLabel(i.metric, i.instance)}</span>
+                  <span>{incidentLabel(i.metric, i.instance)}</span>
                   <span className="num ml-auto text-sm text-muted-foreground">{duration(i.started_at, i.resolved_at)}</span>
                 </Link>
               </li>))}

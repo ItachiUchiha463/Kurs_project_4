@@ -6,7 +6,7 @@ import { IncidentStatusBadge, StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ago, duration, num, plural } from '@/lib/format'
-import { METRICS, metricLabel } from '@/lib/metrics'
+import { METRICS, incidentLabel } from '@/lib/metrics'
 import { useIncidents, useTargets } from '@/lib/queries'
 import type { Status, Target } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -159,7 +159,7 @@ export function DashboardPage() {
                 <Link to={`/incidents/${i.id}`} className="flex flex-wrap items-center gap-3 p-4 hover:bg-muted">
                   <IncidentStatusBadge status={i.status} severity={i.severity} />
                   <span className="font-semibold">{i.target_name}</span>
-                  <span className="text-muted-foreground">{metricLabel(i.metric, i.instance)}</span>
+                  <span className="text-muted-foreground">{incidentLabel(i.metric, i.instance)}</span>
                   <span className="num ml-auto text-sm text-muted-foreground">{duration(i.started_at)}</span>
                 </Link>
               </li>

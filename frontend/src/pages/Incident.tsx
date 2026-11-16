@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { resolveSchema } from '@/forms/schemas'
 import { api } from '@/lib/api'
 import { dateTime, duration, num, time } from '@/lib/format'
-import { FLAG_METRICS, metricLabel, metricUnit } from '@/lib/metrics'
+import { FLAG_METRICS, incidentLabel, metricLabel, metricUnit } from '@/lib/metrics'
 import { useIncident } from '@/lib/queries'
 import type { IncidentEvent } from '@/lib/types'
 
@@ -81,7 +81,7 @@ export function IncidentPage() {
   return (
     <>
       <Link to="/incidents" className="text-sm font-medium text-primary hover:underline">← Інциденти</Link>
-      <PageHead title={`${inc.target_name}: ${metricLabel(inc.metric, inc.instance)}`}
+      <PageHead title={`${inc.target_name}: ${incidentLabel(inc.metric, inc.instance)}`}
         subtitle={<>INC-{inc.id} · відкрито о {time(inc.started_at)}{inc.resolved_at ? ` · закрито о ${time(inc.resolved_at)}` : ''} · триває {duration(inc.started_at, inc.resolved_at)}</>}
         actions={<><SeverityBadge severity={inc.severity} />{inc.status !== 'open' && <IncidentStatusBadge status={inc.status} severity={inc.severity} />}</>} />
 

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { dateTime, duration } from '@/lib/format'
-import { metricLabel } from '@/lib/metrics'
+import { incidentLabel } from '@/lib/metrics'
 import { useIncidents, type IncidentFilters } from '@/lib/queries'
 
 const TABS: [IncidentFilters['status'] | 'all', string][] = [['active', 'Активні'], ['resolved', 'Закриті'], ['all', 'Усі']]
@@ -45,7 +45,7 @@ export function IncidentsPage() {
                 <TableRow key={i.id} className="cursor-pointer" onClick={() => navigate(`/incidents/${i.id}`)}>
                   <TableCell><IncidentStatusBadge status={i.status} severity={i.severity} /></TableCell>
                   <TableCell><Link to={`/incidents/${i.id}`} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{i.target_name}</Link></TableCell>
-                  <TableCell>{metricLabel(i.metric, i.instance)}{i.suppressed_count > 0 && <span className="ml-2 text-sm text-muted-foreground">+{i.suppressed_count} пов’язаних</span>}</TableCell>
+                  <TableCell>{incidentLabel(i.metric, i.instance)}{i.suppressed_count > 0 && <span className="ml-2 text-sm text-muted-foreground">+{i.suppressed_count} пов’язаних</span>}</TableCell>
                   <TableCell className="num">{dateTime(i.started_at)}</TableCell>
                   <TableCell className="num">{duration(i.started_at, i.resolved_at)}</TableCell>
                 </TableRow>

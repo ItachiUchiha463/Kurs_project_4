@@ -14,7 +14,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
 import { clearToken, getToken } from '@/lib/auth'
-import { metricLabel } from '@/lib/metrics'
+import { incidentLabel } from '@/lib/metrics'
 import type { Incident, LiveEvent, Point, Target } from '@/lib/types'
 
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting'
@@ -52,7 +52,7 @@ function applyIncident(qc: QueryClient, change: string, inc: Incident) {
   qc.invalidateQueries({ queryKey: ['incident', inc.id] })
   qc.invalidateQueries({ queryKey: ['targets'] })  // стан дочірніх об’єктів міг змінитися разом із сервером
   if (change === 'opened' || change === 'escalated') {
-    const text = `${inc.target_name}: ${metricLabel(inc.metric, inc.instance)}`
+    const text = `${inc.target_name}: ${incidentLabel(inc.metric, inc.instance)}`
     const show = inc.severity === 'critical' ? toast.error : toast.warning
     show(inc.severity === 'critical' ? `Критично · ${text}` : `Попередження · ${text}`, {
       action: { label: 'Відкрити', onClick: () => window.location.assign(`/incidents/${inc.id}`) },

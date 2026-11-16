@@ -68,6 +68,16 @@ export const AGG_LABEL: Record<string, string> = { last: 'останнє зна�
 export const metricLabel = (metric: string, instance = '') =>
   (METRICS[metric]?.label ?? metric) + (instance ? ` (${instance})` : '')
 
+// Двійкові метрики в заголовку інциденту називаємо проблемою («Контейнер не працює»), а не станом («Контейнер працює»);
+// ті самі формулювання бекенд надсилає в Telegram (notify/messages.py, FLAG_TEXT).
+const FLAG_PROBLEM: Record<string, string> = {
+  available: 'Сервіс недоступний', ping_available: 'Сервер не відповідає на ping', agent_alive: 'Агент не надсилає дані',
+  container_running: 'Контейнер не працює', db_up: 'База даних недоступна',
+  container_oom_killed: 'Контейнер убито через нестачу пам’яті', container_health: 'Контейнер не проходить healthcheck',
+}
+
+export const incidentLabel = (metric: string, instance = '') => FLAG_PROBLEM[metric] ?? metricLabel(metric, instance)
+
 export const metricUnit = (metric: string) => METRICS[metric]?.unit ?? ''
 
 export const SEVERITY_LABEL: Record<Severity, string> = { warning: 'Попередження', critical: 'Критичний' }
