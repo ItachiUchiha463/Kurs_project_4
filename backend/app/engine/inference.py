@@ -108,6 +108,16 @@ def _num(v: float) -> str:
     return f"{v:.1f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
+# Двійкові метрики (0 або 1): у доказі пишемо «так»/«ні», бо «Агент працює 0 == 0» читається як суперечність.
+FLAG_METRICS = {"available", "agent_alive", "ping_available", "container_running", "db_up", "container_oom_killed", "container_health"}
+
+
+def _show(c: Condition, actual: float, unit: str) -> str:
+    if c.metric in FLAG_METRICS:
+        return "так" if actual else "ні"
+    return f"{_num(actual)}{unit} {c.op} {_num(c.value)}{unit}"
+
+
 def _describe(c: Condition, names: dict[str, str]) -> str:
     """Текст умови для пояснення: «CPU web-01, середнє за 5 хв»."""
     who = names[c.scope] + (f" ({c.sibling_type})" if c.scope == "siblings" else "")
@@ -142,16 +152,22 @@ def evaluate(rule: Rule, facts: dict[tuple, float | list[float] | None], names: 
             pick = [v for v, h in zip(actual, hits) if h] or actual
             actual = max(pick) if c.op in (">", ">=") else min(pick) if c.op in ("<", "<=") else pick[0]
             ok_count += ok
-            evidence.append(Evidence(ok, _describe(c, names), f"{_num(actual)}{unit} {c.op} {_num(c.value)}{unit}"))
+            evidence.append(Evidence(ok, _describe(c, names), _show(c, actual, unit)))
             continue
         # Звичайна умова з одним значенням.
         ok = OPS[c.op](actual, c.value)
         ok_count += ok
-        evidence.append(Evidence(ok, _describe(c, names), f"{_num(actual)}{unit} {c.op} {_num(c.value)}{unit}"))
+        evidence.append(Evidence(ok, _describe(c, names), _show(c, actual, unit)))
     return Match(rule, ok_count / len(rule.conditions) if rule.conditions else 0.0, evidence)
 
 
-def diagnose(rules: list[Rule], facts: dict[tuple, float | list[float] | None], names: dict[str, str], target_type: str) -> Diagnosis:
+def _about(m: Match, metric: str) -> bool:
+    """Чи виконано в правилі хоч одну умову про метрику самого інциденту (evidence іде в порядку умов)."""
+    return any(e.ok and c.metric == metric for c, e in zip(m.rule.conditions, m.evidence))
+
+
+def diagnose(rules: list[Rule], facts: dict[tuple, float | list[float] | None], names: dict[str, str], target_type: str,
+             metric: str | None = None) -> Diagnosis:
     """Правило з усіма виконаними умовами – причина; конкретніше (більше умов) вище, далі власні, далі priority.
 
     Порядок вибору, коли кілька правил виконано повністю:
@@ -165,6 +181,9 @@ def diagnose(rules: list[Rule], facts: dict[tuple, float | list[float] | None], 
     full = sorted((m for m in matches if m.ratio == 1.0),
                   key=lambda m: (len(m.rule.conditions), m.rule.own, m.rule.priority), reverse=True)
     primary = full[0] if full else None
-    partial = sorted((m for m in matches if PARTIAL_MIN <= m.ratio < 1.0), key=lambda m: m.ratio, reverse=True)
+    # Можливі причини, у яких жодна виконана умова не стосується метрики інциденту, – випадковий збіг (наприклад, застарілі
+    # дані агента, що замовк), тому їх не показуємо.
+    partial = sorted((m for m in matches if PARTIAL_MIN <= m.ratio < 1.0 and (metric is None or _about(m, metric))),
+                     key=lambda m: m.ratio, reverse=True)
     # Альтернативи: спершу решта повністю виконаних правил, потім часткові (від більшого збігу до меншого).
     return Diagnosis(primary, [m for m in full[1:]] + partial)

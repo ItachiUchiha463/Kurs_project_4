@@ -126,3 +126,24 @@ def test_iowait_rule_is_more_specific_than_generic_io_rule():
     assert d.primary.rule.name == new.name
     f[("self", "cpu_iowait", "avg", 300, None, None)] = 2.0  # iowait низький: лишається загальне правило
     assert diagnose([old, new], f, {"self": "web-01"}, "server").primary.rule.name == old.name
+
+
+AGENT_DEAD = Condition("self", "agent_alive", "==", 0)
+PING_OFF = Condition("self", "ping_available", "==", 0)
+LOAD = Condition("self", "load_per_core", ">", 2, "avg", 300)
+CALM = Condition("self", "cpu_usage", "<", 70, "avg", 300)
+SILENT = {("self", "agent_alive", "last", 0, None, None): 0.0, ("self", "load_per_core", "avg", 300, None, None): 0.5,
+          ("self", "cpu_usage", "avg", 300, None, None): 20.0}
+
+
+def test_flag_evidence_is_yes_no():
+    m = evaluate(rule("агент", [AGENT_DEAD], applies=("server",)), SILENT, {"self": "Test"})
+    assert m.ratio == 1.0 and m.evidence[0].value == "ні" and m.evidence[0].text == "Агент працює Test"
+
+
+def test_possible_causes_must_concern_the_incident_metric():
+    rules = [rule("мовчить", [AGENT_DEAD], applies=("server",)), rule("вимкнений", [AGENT_DEAD, PING_OFF], applies=("server",)),
+             rule("диск", [LOAD, CALM], applies=("server",))]
+    d = diagnose(rules, SILENT, {"self": "Test"}, "server", "agent_alive")
+    assert d.primary.rule.name == "мовчить" and [m.rule.name for m in d.alternatives] == ["вимкнений"]
+    assert [m.rule.name for m in diagnose(rules, SILENT, {"self": "Test"}, "server").alternatives] == ["вимкнений", "диск"]

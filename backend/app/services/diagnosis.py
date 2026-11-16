@@ -110,7 +110,7 @@ async def diagnose_incident(db: AsyncSession, incident: Incident, target: Target
     """Визначає причину інциденту й зберігає діагноз (один на інцидент; при ескалації оновлюється)."""
     rules = await active_rules(db, target.owner_id, target.type)
     facts, names = await collect_facts(db, target, rules, incident.instance, ref)
-    result = inference.diagnose(rules, facts, names, target.type)
+    result = inference.diagnose(rules, facts, names, target.type, incident.metric)
 
     primary = result.primary
     # Діагноз інциденту один: якщо він уже є (інцидент підвищено), оновлюємо його, а не створюємо другий.
